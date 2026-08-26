@@ -1,6 +1,7 @@
 # TDL-Bot — Project Overview (Planning)
 
-> **Status:** Planning only. No implementation code yet. This folder contains design docs.
+> **Status:** Scaffold built. `/signup` implemented (not yet Discord-tested or
+> deployed). This folder is the source of truth for design decisions.
 
 ## What is TDL-Bot?
 
@@ -118,3 +119,4 @@ Same dual-mode pattern as DFC-Data:
 - `02-sheets-integration.md` — auth, read/write, dedupe, env config
 - `03-decisions.md` — resolved decisions (was open questions)
 - `04-google-form-retirement.md` — why the Form is retired; bot-only rationale
+- `05-heroku-hosting.md` — Heroku deploy model, config vars, dyno, ops
