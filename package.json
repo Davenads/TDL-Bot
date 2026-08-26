@@ -1,0 +1,26 @@
+{
+  "name": "tdl-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "deploy-cmds": "node deploy-commands.js",
+    "deploy-cmds-prod": "TEST_MODE=false node deploy-commands.js"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "Discord bot for the Toeshank Dueling League (TDL) - weekly D2R event signups backed by Google Sheets.",
+  "dependencies": {
+    "@discordjs/rest": "^2.4.0",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "googleapis": "^144.0.0",
+    "node-cron": "^4.0.7",
+    "redis": "^5.1.0"
+  }
+}

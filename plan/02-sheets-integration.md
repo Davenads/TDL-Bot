@@ -1,0 +1,105 @@
+# Google Sheets Integration — Design (Planning)
+
+## Auth
+
+Reuse DFC's service-account JWT approach verbatim (`utils/googleAuth.js`):
+
+- Env vars: `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`.
+- Private key: `\\n` escapes locally, real newlines on Heroku.
+- Scope: `https://www.googleapis.com/auth/spreadsheets`.
+
+### ACTION REQUIRED (out-of-band)
+
+**DECIDED: reuse DFC's existing Google service account.** Its email must be granted
+**Editor** access to the TDL spreadsheet
+`1gz1sIYGUf-vxMCmsl7b7icFfI9HlAYSbs1rOFRCz1Ww`.
+- Copy `GOOGLE_CLIENT_EMAIL` + `GOOGLE_PRIVATE_KEY` from DFC's env into TDL's env.
+
+## Environment variables (`.env`)
+
+```env
+# Discord
+BOT_TOKEN=
+CLIENT_ID=
+GUILD_ID=            # test server
+PROD_GUILD_ID=       # Toeshank's server
+
+# Google
+TDL_SPREADSHEET_ID=1gz1sIYGUf-vxMCmsl7b7icFfI9HlAYSbs1rOFRCz1Ww
+GOOGLE_CLIENT_EMAIL=
+GOOGLE_PRIVATE_KEY=
+
+# Mode
+TEST_MODE=true       # true → Registration Test tab, false → Registration tab
+
+# Redis (optional)
+REDISCLOUD_URL=
+```
+
+Tab name resolves from `TEST_MODE`:
+
+```js
+const REG_TAB = process.env.TEST_MODE === 'true' ? 'Registration Test' : 'Registration';
+```
+
+## Read (for dedupe + future /recentsignups)
+
+```js
+sheets.spreadsheets.values.get({
+  auth,
+  spreadsheetId: process.env.TDL_SPREADSHEET_ID,
+  range: `${REG_TAB}!A:E`,
+});
+```
+
+- Parse rows, skip header.
+- Filter to current registration week via `tdlWeekUtils.filterCurrentWeekSignups`.
+- For dedupe, match on Discord UUID column.
+
+## Write (upsert) — DECIDED schema
+
+Reshaped tab columns: `Timestamp | Discord UUID | Discord Username | Notes | Category`
+(range `A:E`). Following DFC `register.js` pattern:
+
+- Compute `nextRow = rows.length + 1` for inserts.
+- **Insert:** `values.update` at `${REG_TAB}!A${nextRow}:E${nextRow}` (RAW).
+- **Update existing:** `values.update` at the matched row's `A{n}:E{n}`.
+
+Row values: `[ timestamp, uuid, username, notes, category ]` where `category` is
+`HLD` or `LLD` only.
+
+### "Both" = two writes
+
+A "Both" signup performs the upsert **twice** — once for `HLD`, once for `LLD` —
+each keyed on **(UUID + Category)** within the current week. Sequence them (read →
+resolve both rows → write) so the second write sees the row the first may have added.
+At this volume, two sequential `values.update` calls are fine.
+
+## Caching (optional, phase 2)
+
+Port DFC's `signupsCache.js` for read-heavy commands later (`/recentsignups`).
+- Redis key e.g. `tdl-data:recent-signups`, TTL ~3h.
+- Cron refreshes around the event (e.g. Monday afternoon + post-event).
+- Graceful fallback to live Sheets read if Redis is down (same as DFC).
+
+The `/signup` write path does **not** require Redis — only a fire-and-forget cache
+refresh after a successful write.
+
+## Timestamp format
+
+DFC writes ISO strings for its own tabs but the **Registration** tab is currently
+fed by a Google Form, which writes Sheets-native datetimes like `M/D/YYYY H:mm:ss`.
+The Looker Studio report likely parses that format.
+
+**Decision needed:** write timestamps in the **same format the existing Form uses**
+so downstream parsing (report, standings, ELO date logic) stays intact. Verify by
+inspecting a few existing `Registration` rows.
+
+## Risks
+
+- **Concurrent writes:** two players submitting at once could compute the same
+  `nextRow`. Low volume (a niche weekly event) makes this unlikely, but `values.append`
+  with `INSERT_ROWS` avoids the race for pure inserts. Upserts still read-then-write;
+  acceptable at this scale. Note and revisit if volume grows.
+- **Schema drift:** if we reshape the Registration tab, the existing Google Form and
+  the Looker report bindings break. Prefer an additive approach (see open questions).

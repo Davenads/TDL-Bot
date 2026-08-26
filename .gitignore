@@ -1,0 +1,10 @@
+.env
+node_modules/
+config/credentials.json
+
+# Claude Code local settings (user-specific)
+.claude/settings.local.json
+.claude/CLAUDE.md
+
+.vscode/
+debug-ss/
