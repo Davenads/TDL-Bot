@@ -89,3 +89,4 @@ See `plan/` for the full design and decision records:
 - `03-decisions.md`
 - `04-google-form-retirement.md`
 - `05-heroku-hosting.md`
+- `06-google-cloud-setup.md`
