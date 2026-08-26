@@ -5,30 +5,38 @@
 //
 // Exit code 0 = all pass, 1 = any failure.
 
-process.env.TEST_MODE = 'true'; // -> REG_TAB = 'Registration Test'
+process.env.TEST_MODE = 'true'; // MUST be set before requiring signup.js (REG_TAB is read at load)
 
 const assert = require('assert');
 const { formatSheetTimestamp } = require('../utils/tdlWeekUtils');
 const { _internals } = require('../commands/signup');
-const { upsertSignups, REG_TAB } = _internals;
+const { upsertSignups, REG_TAB, COL, CATEGORY_DIVISIONS } = _internals;
 
+// Fail loudly if the env-before-require ordering ever breaks (would otherwise
+// silently switch REG_TAB to the prod tab and stop testing test-mode behavior).
+assert.strictEqual(REG_TAB, 'Registration Test', 'TEST_MODE must resolve REG_TAB to the test tab');
+
+// Row-0 filler. Only its presence matters (upsertSignups skips the header); the
+// label strings are never asserted against.
 const HEADER = ['Timestamp', 'Discord UUID', 'Discord Username', 'Notes', 'Category'];
-const NOW = formatSheetTimestamp();      // current-week timestamp (ET, sheet format)
-const STALE = '1/1/2020 12:00:00';        // well before any current week
+const NOW = formatSheetTimestamp();       // current-week timestamp (ET, sheet format)
+const STALE = '1/1/2020 12:00:00';         // well before any current week (year gap => TZ-safe)
 const AUTH = { fake: true };
 
 function rng(row) {
     return `${REG_TAB}!A${row}:E${row}`;
 }
 
-// Fake googleapis `sheets` object. `get` returns the seeded rows once;
-// `update` records every write so we can assert range + payload.
+// Fake googleapis `sheets` object. `get` returns a DEEP COPY of the seeded rows
+// (like the real API returns fresh data each fetch) so upsertSignups' in-place
+// row mutation can't leak back and fabricate a false pass. `update` records
+// every write so we can assert range + payload.
 function makeSheets(rows) {
     const updates = [];
     const api = {
         spreadsheets: {
             values: {
-                get: async () => ({ data: { values: rows } }),
+                get: async () => ({ data: { values: rows.map(r => (r ? r.slice() : r)) } }),
                 update: async ({ range, requestBody }) => {
                     updates.push({ range, values: requestBody.values[0] });
                     return { data: {} };
@@ -50,7 +58,7 @@ function test(name, fn) { tests.push({ name, fn }); }
 test('Both -> two created rows at the next two rows', async () => {
     const { api, updates } = makeSheets([HEADER.slice()]);
     const results = await upsertSignups({
-        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: '', divisions: ['HLD', 'LLD']
+        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: '', divisions: CATEGORY_DIVISIONS.Both
     });
     assert.strictEqual(updates.length, 2, 'two writes');
     assert.strictEqual(updates[0].range, rng(2), 'first at row 2');
@@ -65,11 +73,11 @@ test('Re-run same (UUID+Category) this week -> updated in place, no new row', as
     const existing = [NOW, 'U1', 'alice', 'old note', 'HLD'];
     const { api, updates } = makeSheets([HEADER.slice(), existing]);
     const results = await upsertSignups({
-        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: 'new note', divisions: ['HLD']
+        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: 'new note', divisions: CATEGORY_DIVISIONS.HLD
     });
     assert.strictEqual(updates.length, 1, 'one write');
     assert.strictEqual(updates[0].range, rng(2), 'targets the existing row');
-    assert.strictEqual(updates[0].values[3], 'new note', 'notes refreshed');
+    assert.strictEqual(updates[0].values[COL.NOTES], 'new note', 'notes refreshed');
     assert.deepStrictEqual(results, [{ category: 'HLD', action: 'updated' }]);
 });
 
@@ -77,7 +85,7 @@ test('Stale (last-week) row is ignored -> creates a new row', async () => {
     const stale = [STALE, 'U1', 'alice', '', 'HLD'];
     const { api, updates } = makeSheets([HEADER.slice(), stale]);
     const results = await upsertSignups({
-        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: '', divisions: ['HLD']
+        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: '', divisions: CATEGORY_DIVISIONS.HLD
     });
     assert.strictEqual(updates.length, 1);
     assert.strictEqual(updates[0].range, rng(3), 'appends rather than overwriting the stale row');
@@ -88,11 +96,11 @@ test('Different UUID, same category -> separate row', async () => {
     const other = [NOW, 'U1', 'alice', '', 'HLD'];
     const { api, updates } = makeSheets([HEADER.slice(), other]);
     const results = await upsertSignups({
-        sheets: api, auth: AUTH, uuid: 'U2', username: 'bob', notes: '', divisions: ['HLD']
+        sheets: api, auth: AUTH, uuid: 'U2', username: 'bob', notes: '', divisions: CATEGORY_DIVISIONS.HLD
     });
     assert.strictEqual(updates.length, 1);
     assert.strictEqual(updates[0].range, rng(3));
-    assert.strictEqual(updates[0].values[1], 'U2');
+    assert.strictEqual(updates[0].values[COL.UUID], 'U2');
     assert.deepStrictEqual(results, [{ category: 'HLD', action: 'created' }]);
 });
 
@@ -100,7 +108,7 @@ test('Both with one pre-existing division -> mixed created/updated', async () =>
     const existingLLD = [NOW, 'U1', 'alice', 'prev', 'LLD'];
     const { api, updates } = makeSheets([HEADER.slice(), existingLLD]);
     const results = await upsertSignups({
-        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: 'x', divisions: ['HLD', 'LLD']
+        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: 'x', divisions: CATEGORY_DIVISIONS.Both
     });
     assert.strictEqual(updates.length, 2);
     assert.strictEqual(updates[0].range, rng(3), 'new HLD appended');
@@ -114,35 +122,40 @@ test('Both with one pre-existing division -> mixed created/updated', async () =>
 test('Written row shape = [timestamp, uuid, username, notes, category]', async () => {
     const { api, updates } = makeSheets([HEADER.slice()]);
     await upsertSignups({
-        sheets: api, auth: AUTH, uuid: 'U9', username: 'carol', notes: 'gg', divisions: ['HLD']
+        sheets: api, auth: AUTH, uuid: 'U9', username: 'carol', notes: 'gg', divisions: CATEGORY_DIVISIONS.HLD
     });
     const row = updates[0].values;
     assert.strictEqual(row.length, 5);
-    assert.match(row[0], /^\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2}$/, 'sheet timestamp format');
-    assert.strictEqual(row[1], 'U9');
-    assert.strictEqual(row[2], 'carol');
-    assert.strictEqual(row[3], 'gg');
-    assert.strictEqual(row[4], 'HLD');
+    assert.match(row[COL.TIMESTAMP], /^\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2}$/, 'sheet timestamp format');
+    assert.strictEqual(row[COL.UUID], 'U9');
+    assert.strictEqual(row[COL.USERNAME], 'carol');
+    assert.strictEqual(row[COL.NOTES], 'gg');
+    assert.strictEqual(row[COL.CATEGORY], 'HLD');
 });
 
 test('Both writes share one identical timestamp', async () => {
     const { api, updates } = makeSheets([HEADER.slice()]);
     await upsertSignups({
-        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: '', divisions: ['HLD', 'LLD']
+        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: '', divisions: CATEGORY_DIVISIONS.Both
     });
-    assert.strictEqual(updates[0].values[0], updates[1].values[0], 'same timestamp on both rows');
+    assert.strictEqual(updates[0].values[COL.TIMESTAMP], updates[1].values[COL.TIMESTAMP], 'same timestamp on both rows');
 });
 
 test('Empty sheet (no header) -> first write lands at row 1', async () => {
     const { api, updates } = makeSheets([]);
     const results = await upsertSignups({
-        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: '', divisions: ['HLD']
+        sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: '', divisions: CATEGORY_DIVISIONS.HLD
     });
     assert.strictEqual(updates[0].range, rng(1));
     assert.deepStrictEqual(results, [{ category: 'HLD', action: 'created' }]);
 });
 
 // Run -----------------------------------------------------------------------
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled rejection:', err);
+    process.exit(1);
+});
+
 (async () => {
     for (const t of tests) {
         try {
@@ -156,4 +169,7 @@ test('Empty sheet (no header) -> first write lands at row 1', async () => {
     }
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail === 0 ? 0 : 1);
-})();
+})().catch((err) => {
+    console.error('Runner crashed:', err);
+    process.exit(1);
+});

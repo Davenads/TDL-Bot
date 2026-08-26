@@ -140,7 +140,7 @@ async function upsertSignups({ sheets, auth, uuid, username, notes, divisions })
 
 module.exports = {
     // Exposed for unit testing (see test/upsert.test.js). Not used by the bot runtime.
-    _internals: { upsertSignups, hasDuelerRole, REG_TAB, SPREADSHEET_ID, COL, CATEGORY_DIVISIONS },
+    _internals: { upsertSignups, REG_TAB, COL, CATEGORY_DIVISIONS },
 
     data: new SlashCommandBuilder()
         .setName('signup')
