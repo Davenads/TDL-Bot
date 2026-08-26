@@ -6,7 +6,8 @@
     "start": "node index.js",
     "dev": "node index.js",
     "deploy-cmds": "node deploy-commands.js",
-    "deploy-cmds-prod": "TEST_MODE=false node deploy-commands.js"
+    "deploy-cmds-prod": "TEST_MODE=false node deploy-commands.js",
+    "test": "node test/upsert.test.js"
   },
   "engines": {
     "node": "20.x"
