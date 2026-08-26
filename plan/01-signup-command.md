@@ -159,7 +159,7 @@ Notes: "prefer bo5 for HLD"
 Implementation notes:
 - The wizard steps (division buttons + notes modal) stay **ephemeral**; only the
   final confirmation is public.
-- Consider a dedicated signups channel (config `SIGNUP_CHANNEL_ID`) vs. posting in
-  the invoking channel — confirm which channel. Default: invoking channel.
+- Dedicated signups channel supported via optional `SIGNUP_CHANNEL_ID`; if unset,
+  confirmations post in the invoking channel (default). **Implemented.**
 - On an **update** (re-signup), phrase it as "updated their TDL signup" to avoid
   spam confusion.

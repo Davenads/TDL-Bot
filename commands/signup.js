@@ -19,6 +19,8 @@ const {
 const DUELER_ROLE = process.env.DUELER_ROLE_NAME || 'Dueler';
 const SPREADSHEET_ID = process.env.TDL_SPREADSHEET_ID || '1gz1sIYGUf-vxMCmsl7b7icFfI9HlAYSbs1rOFRCz1Ww';
 const REG_TAB = process.env.TEST_MODE === 'true' ? 'Registration Test' : 'Registration';
+// Optional dedicated channel for public signup confirmations; falls back to the invoking channel.
+const SIGNUP_CHANNEL_ID = process.env.SIGNUP_CHANNEL_ID || null;
 
 // Reshaped Registration tab: A=Timestamp, B=Discord UUID, C=Discord Username, D=Notes, E=Category
 const COL = { TIMESTAMP: 0, UUID: 1, USERNAME: 2, NOTES: 3, CATEGORY: 4 };
@@ -289,7 +291,16 @@ module.exports = {
                 .setTimestamp();
 
             try {
-                await interaction.channel.send({ embeds: [publicEmbed] });
+                let target = interaction.channel;
+                if (SIGNUP_CHANNEL_ID) {
+                    try {
+                        const configured = await interaction.client.channels.fetch(SIGNUP_CHANNEL_ID);
+                        if (configured && typeof configured.send === 'function') target = configured;
+                    } catch (chErr) {
+                        console.error(`[${timestamp}] SIGNUP_CHANNEL_ID ${SIGNUP_CHANNEL_ID} unavailable, using invoking channel:`, chErr.message);
+                    }
+                }
+                await target.send({ embeds: [publicEmbed] });
             } catch (postErr) {
                 console.error(`[${timestamp}] Failed to post public confirmation:`, postErr.message);
             }
