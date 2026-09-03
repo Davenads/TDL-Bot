@@ -93,13 +93,15 @@ previously deferred — it now exists as a real tab.
 
 - **`Discord UUID` (col C) is the stable join key.** Usernames drift (Discord allows
   a change every ~2 weeks), so never key on the name.
-- The bot **reads** `Roster` on `/signup` to resolve the player's Data Name and can
-  **opportunistically refresh** col B (Discord Name) when the UUID matches but the
-  stored name is stale — keeping the roster's usernames current for free.
-- The bot does **not** invent Data Names. A player absent from the roster still
-  signs up fine (roster is **enrichment, not a gate**); Data Name resolves to unknown
-  until an admin adds them. See `02-sheets-integration.md` for mechanics and
-  `03-decisions.md` for the open calls.
+- **Roster membership is a hard gate on `/signup`.** The bot reads `Roster` and, if
+  the invoking user's UUID isn't present, **blocks the signup** with a "get added to
+  the roster first" message — a guard alongside the `@Dueler` role.
+- On a matched signup the bot resolves the player's **Data Name** (used in the public
+  confirmation) and can **opportunistically refresh** col B (Discord Name) when the
+  stored username is stale — keeping the roster current for free (bot has write access).
+- The bot never **invents** a Data Name. Roster rows are created out-of-band today
+  (admin edits the sheet) and, in future, via a **`/register`** command. See
+  `02-sheets-integration.md` for mechanics and `03-decisions.md` for the decisions.
 
 ## Categories
 
@@ -124,6 +126,8 @@ Same dual-mode pattern as DFC-Data:
 
 ## Deferred / Future scope (not now)
 
+- `/register` command — appends a player to the `Roster` tab (`Data Name |
+  Discord Name | Discord UUID`); the write path that populates the `/signup` gate
 - `/standings`, `/elo`, `/results`, `/builds` read commands (report-style, like DFC)
 - Result reporting command (writes to `Results`)
 - Signup-window open/close announcements via cron

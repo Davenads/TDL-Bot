@@ -40,9 +40,10 @@ Behavior:
 - **Both** expands to two rows (one HLD, one LLD).
 - Upsert keyed on **(UUID + Category)** within the current week — re-running replaces
   that division's row rather than duplicating it.
-- Reads the `Roster` tab (`Data Name | Discord Name | Discord UUID`) keyed on UUID to
-  resolve the player's Data Name and optionally refresh their stored Discord username.
-  Enrichment only — not a signup gate.
+- **Roster gate:** checks the `Roster` tab (`Data Name | Discord Name | Discord UUID`)
+  by UUID up front — users not on the roster are blocked. On a match it resolves the
+  Data Name (shown in the confirmation) and refreshes the stored Discord username if
+  it drifted. A future `/register` command will add users to the roster.
 - Registration window: opens Tuesday 12:00 AM ET, closes Sunday 11:59 PM ET (all day
   Monday is closed so matchups can be built before the event).
 

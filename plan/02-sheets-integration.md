@@ -96,24 +96,34 @@ sheets.spreadsheets.values.get({
 ```
 
 - Build a `uuid → { dataName, discordName, rowIndex }` map (skip header).
-- On `/signup`, look up the invoking user's UUID:
-  - **Found** → resolve `Data Name` for display/enrichment.
-  - **Not found** → signup still proceeds; `Data Name` is treated as unknown. The
-    roster is **enrichment, not a gate** (the `@Dueler` role already gates access).
+- On `/signup`, look up the invoking user's UUID **up front (a hard gate)**:
+  - **Found** → resolve `Data Name`; proceed to the division prompt.
+  - **Not found** → **block the signup.** Ephemeral "you're not on the TDL roster
+    yet — get added first." No division prompt, no Registration write.
+  - **Lookup errors (Sheets 4xx/5xx)** → fail **closed** ("try again later"); never
+    let a read error silently bypass the gate.
 
 > Roster is **not** environment-split — there is one `Roster` tab regardless of
 > `TEST_MODE`. Only the `Registration`/`Registration Test` write target flips.
 
-### Opportunistic Discord Name refresh (proposed)
+### Opportunistic Discord Name refresh — DECIDED
 
 Because col B drifts, when a signing-up user's UUID matches a roster row but the
-stored `Discord Name` differs from their live username, the bot can overwrite col B:
+stored `Discord Name` differs from their live username, the bot overwrites col B:
 
 - `values.update` at `Roster!B{rowIndex}` with the current username.
 - **Fire-and-forget**, after the Registration write succeeds — never block the
   signup on it, and swallow/log failures.
 - Only touches col B on a **UUID match**; never adds roster rows (no Data Name to
-  supply).
+  supply — that is `/register`'s job).
+
+### Write access — DECIDED
+
+The service account needs **Editor** on the sheet (already required for
+Registration). The bot writes to `Roster` for the col-B refresh above and, in future,
+for **`/register`** (appends `[ Data Name, Discord Name, Discord UUID ]` — the write
+path that populates the gate). `/register` is deferred; noted here so the write scope
+is planned, not retrofitted.
 
 ### Join direction (why this matters)
 
