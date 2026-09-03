@@ -19,16 +19,19 @@ const {
     lookupRosterEntry,
     refreshDiscordName
 } = require('../utils/rosterUtils');
+const {
+    REG_TAB,
+    COL,
+    invalidateSignupsCache
+} = require('../utils/signupUtils');
 
 // ---- Config ----
 const DUELER_ROLE = process.env.DUELER_ROLE_NAME || 'Dueler';
 const SPREADSHEET_ID = process.env.TDL_SPREADSHEET_ID || '1gz1sIYGUf-vxMCmsl7b7icFfI9HlAYSbs1rOFRCz1Ww';
-const REG_TAB = process.env.TEST_MODE === 'true' ? 'Registration Test' : 'Registration';
 // Optional dedicated channel for public signup confirmations; falls back to the invoking channel.
 const SIGNUP_CHANNEL_ID = process.env.SIGNUP_CHANNEL_ID || null;
-
-// Reshaped Registration tab: A=Timestamp, B=Discord UUID, C=Discord Username, D=Notes, E=Category
-const COL = { TIMESTAMP: 0, UUID: 1, USERNAME: 2, NOTES: 3, CATEGORY: 4 };
+// REG_TAB (test/prod tab) and COL (Registration schema) come from signupUtils so
+// the read cache and the write upsert share one source of truth.
 
 // A "Both" selection expands into two independent division rows (see plan 01/02).
 const CATEGORY_DIVISIONS = {
@@ -320,6 +323,12 @@ module.exports = {
                     .then(did => { if (did) console.log(`[${timestamp}] Roster Discord Name refreshed for ${uuid}`); })
                     .catch(refErr => console.error(`[${timestamp}] Roster refresh failed for ${uuid} (non-fatal):`, refErr.message));
             }
+
+            // The current-week signups changed — evict the read cache so
+            // /recentsignups reflects this signup. Fire-and-forget.
+            invalidateSignupsCache().catch(evErr =>
+                console.error(`[${timestamp}] Signups cache evict failed (non-fatal):`, evErr.message)
+            );
 
             const createdCount = results.filter(r => r.action === 'created').length;
             const updatedCount = results.filter(r => r.action === 'updated').length;

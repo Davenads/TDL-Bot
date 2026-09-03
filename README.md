@@ -11,7 +11,7 @@ data a Google Form cannot reliably capture.
 
 - Node.js 20.x + discord.js v14 (slash commands, buttons, modals)
 - Google Sheets API (googleapis) — persistence
-- Redis (optional) — read caching (roster map is cached; see `plan/07`)
+- Redis (optional) — read caching (roster map + current-week signups; see `plan/07`)
 - Heroku (GitHub auto-deploy)
 
 ## Project structure
@@ -22,12 +22,14 @@ deploy-commands.js    Registers slash commands to the TEST and PROD guilds
 commands/
   signup.js           /signup wizard + Google Sheets upsert
   register.js         /register — add/update a player in the Roster tab
+  recentsignups.js    /recentsignups — this week's signups by division (cached read)
 utils/
   googleAuth.js       Service-account JWT auth
   redisClient.js      Optional Redis connection
   cache.js            Guarded cache helpers over Redis (graceful no-op fallback)
   tdlWeekUtils.js     Registration-window gate, week math, timestamp formatting
   rosterUtils.js      Roster read/lookup + cache, username refresh, register upsert
+  signupUtils.js      Registration schema (REG_TAB/COL) + current-week signups cache
 plan/                 Design docs (source of truth for decisions)
 ```
 
@@ -70,6 +72,19 @@ Adds (or updates) a player in the `Roster` tab — the identity that `/signup` g
 - **Name clash blocked:** a Data Name already held by a different player is refused.
 - Writes `[Data Name, Discord Name, Discord UUID]`; confirmation is ephemeral.
 
+## `/recentsignups`
+
+Ephemeral list of who has signed up for this week's event.
+
+- Groups signups by division (**HLD** / **LLD**) with per-division counts and a
+  distinct-dueler total.
+- Names shown are roster **Data Names** (falls back to the stored Discord username if
+  the roster lookup hiccups).
+- Reads are served from a Redis cache (`tdl:signups:current`, `:test` in `TEST_MODE`,
+  2-hour TTL) that `/signup` evicts on each new signup; with Redis down it falls back
+  to a live Sheets read. Long division lists are truncated with a `+N more` tail to
+  stay under Discord's field limit.
+
 ## Setup
 
 1. `npm install`
@@ -98,7 +113,7 @@ Adds (or updates) a player in the `Roster` tab — the identity that `/signup` g
 | `DUELER_ROLE_NAME` | Role name required for `/signup` (default `Dueler`) |
 | `TDL_ADMIN_ROLE_NAME` | Optional role name allowed to register others via `/register`; Manage-Server members can too |
 | `SIGNUP_CHANNEL_ID` | Optional channel for public confirmations; defaults to invoking channel |
-| `REDISCLOUD_URL` | Optional Redis URL (phase-2 caching) |
+| `REDISCLOUD_URL` | Optional Redis URL (caches roster map + current-week signups) |
 
 ## Deployment
 

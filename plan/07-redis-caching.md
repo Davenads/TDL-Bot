@@ -1,7 +1,8 @@
 # 07 — Redis Caching Strategy
 
-> **Status:** **Phase A BUILT** (roster read-through cache + evict-on-`/register`).
-> Phases B–C still planned. Redis remains an **optional** connection
+> **Status:** **Phases A & B BUILT** (roster read-through cache + evict-on-`/register`;
+> current-week signups read-through cache + evict-on-`/signup`, feeding `/recentsignups`).
+> Phase C still planned. Redis remains an **optional** connection
 > (`utils/redisClient.js`); with it down, everything falls back to live Sheets
 > reads. This doc defines *what* to cache, *how*, and *when to invalidate*.
 >
@@ -37,7 +38,7 @@ hot, rarely-changing data from memory and only fall back to Sheets on a miss.
 | Priority | Data | Key | Value | TTL | Invalidate on | Status |
 |---|---|---|---|---|---|---|
 | 1 | **Roster map** (whole tab) | `tdl:roster` | JSON: `{ uuid: { dataName, discordName, rowIndex } }` | 10 min | `/register` write (evict) | **Built** |
-| 2 | Current-week signups | `tdl:signups:current` | JSON array of rows | ~1–3 h | `/signup` write (evict) | Planned |
+| 2 | Current-week signups | `tdl:signups:current` (`:test` in TEST_MODE) | JSON `{ weekStart, rows }` | 2 h | `/signup` write (evict) | **Built** |
 | 3 | Standings / ELO (future) | `tdl:standings`, `tdl:elo:*` | JSON | ~1–3 h | cron refresh around event | Planned |
 
 > Namespacing: prefix everything `tdl:` (DFC uses `dfc-data:`) to avoid collisions
@@ -56,10 +57,23 @@ hot, rarely-changing data from memory and only fall back to Sheets on a miss.
   evict via TTL. Keep writes reading fresh; let only the **gate/display** read use
   cache. (Simplest safe split: cache the *membership + Data Name*, not write targets.)
 
-### 2. Current-week signups
+### 2. Current-week signups — BUILT (Phase B)
 
-- Port DFC's `signupsCache.js` shape. Used by a future `/recentsignups` and for
-  dedupe reads. Evict `tdl:signups:current` after any `/signup` upsert.
+- **Read path:** `signupUtils.getCurrentWeekSignups()` tries Redis first; on miss it
+  reads `Registration!A:E` (or `Registration Test!A:E`), filters to the current week
+  via `filterCurrentWeekSignups`, `SET`s with a 2-hour TTL, and returns the rows.
+  `/recentsignups` consumes this (plus the Phase A roster cache for Data Names).
+- **weekStart guard:** the cached value is `{ weekStart, rows }`, stamped with
+  `getWeekStartDate()` (the Tuesday-anchored week start). On read, a cached payload
+  whose `weekStart` differs from the current week is ignored and re-read — so a list
+  cached just before the Tuesday 12:00 AM ET rollover can never be served into the
+  new week even if the TTL hasn't lapsed.
+- **Mode-namespaced key:** `tdl:signups:current` in prod, `tdl:signups:current:test`
+  in `TEST_MODE`, so a shared Redis instance can't cross-contaminate test/prod lists.
+- **Read/display only.** The `/signup` upsert still reads `Registration!A:E` **fresh**
+  for dedupe/append — the cache is never a write target (stale-`rowIndex` hazard).
+- **Eviction:** `/signup` calls `invalidateSignupsCache()` (fire-and-forget) after a
+  successful upsert, so `/recentsignups` reflects the new signup immediately.
 
 ## Invalidation — the part that matters
 
@@ -114,7 +128,16 @@ Put these in a small `utils/cache.js`; keep `redisClient.js` as the raw connecti
    - Tests: `test/cache.test.js` (11 — helpers, read-through, eviction, Redis-down
      fallback, fail-closed on Sheets error) + `buildRosterMap` cases in
      `test/roster.test.js`.
-2. **Phase B:** current-week signups cache + `/recentsignups`.
+2. **Phase B — BUILT.** Current-week signups read-through cache
+   (`utils/signupUtils.getCurrentWeekSignups`/`invalidateSignupsCache`, key
+   `tdl:signups:current`[`:test`], 2-hour TTL, `{ weekStart, rows }` payload with a
+   week-rollover guard) plus the new **`/recentsignups`** command that reads it. The
+   `/signup` upsert evicts the key after writing; the upsert itself keeps reading
+   `Registration!A:E` fresh. `REG_TAB`/`COL` now live in `signupUtils` as the single
+   source of truth shared by the read cache and the write upsert.
+   - Tests: `test/signups.test.js` (7 — read-through, cache hit skips re-read,
+     invalidate forces re-read, wrong-week payload ignored, Redis-down every-call
+     reads, Sheets error propagates, cache-read hiccup falls back to live read).
 3. **Phase C:** standings/ELO caches with a `node-cron` refresh around the Monday
    event (`node-cron` is already a dependency).
 

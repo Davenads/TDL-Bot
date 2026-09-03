@@ -7,7 +7,7 @@
     "dev": "node index.js",
     "deploy-cmds": "node deploy-commands.js",
     "deploy-cmds-prod": "TEST_MODE=false node deploy-commands.js",
-    "test": "node test/upsert.test.js && node test/roster.test.js && node test/cache.test.js"
+    "test": "node test/upsert.test.js && node test/roster.test.js && node test/cache.test.js && node test/signups.test.js"
   },
   "engines": {
     "node": "20.x"

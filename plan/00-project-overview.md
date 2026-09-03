@@ -1,9 +1,10 @@
 # TDL-Bot — Project Overview (Planning)
 
-> **Status:** Scaffold built. `/signup` and `/register` implemented + unit-tested
-> (not yet Discord-tested or deployed). Redis caching **Phase A** (roster
-> read-through + evict on `/register`) is built. This folder is the source of
-> truth for design decisions.
+> **Status:** Scaffold built. `/signup`, `/register`, and `/recentsignups`
+> implemented + unit-tested (not yet Discord-tested or deployed). Redis caching
+> **Phases A & B** are built — Phase A (roster read-through + evict on `/register`)
+> and Phase B (current-week signups read-through + evict on `/signup`, feeding
+> `/recentsignups`). This folder is the source of truth for design decisions.
 
 ## What is TDL-Bot?
 
@@ -136,11 +137,15 @@ Same dual-mode pattern as DFC-Data:
 - **`/register`** — appends/updates a player in the `Roster` tab (`Data Name |
   Discord Name | Discord UUID`); the write path that populates the `/signup` gate.
   Hybrid model (self-serve + admin override). See `03` rows 14–18.
+- **`/recentsignups`** — ephemeral list of this week's signups, grouped by division
+  (HLD/LLD) with a distinct-dueler count. Served from the Redis current-week signups
+  cache (Phase B), with Data Names resolved via the roster cache. See `07`.
 
 ## Deferred / Future scope (not now)
 
-- **Redis caching (Phases B–C)** — Phase A (roster cache) is **built**; next is
-  caching recent-signups then standings/ELO. See `07-redis-caching.md`.
+- **Redis caching (Phase C)** — Phases A (roster cache) and B (current-week signups
+  cache + `/recentsignups`) are **built**; next is caching standings/ELO with a
+  cron refresh. See `07-redis-caching.md`.
 - `/standings`, `/elo`, `/results`, `/builds` read commands (report-style, like DFC)
 - Result reporting command (writes to `Results`)
 - Signup-window open/close announcements via cron
