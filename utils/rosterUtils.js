@@ -85,10 +85,72 @@ async function refreshDiscordName({ sheets, auth, spreadsheetId, entry, username
     return true;
 }
 
+/**
+ * Register (upsert) a player into the Roster tab. Backs the `/register` command.
+ *
+ * Rules:
+ *  - **Name clash blocked:** if the Data Name is already held by a *different*
+ *    UUID (case-insensitive), refuse — returns `{ ok:false, reason:'NAME_TAKEN' }`.
+ *    Prevents claiming another player's ranking identity.
+ *  - **Re-register updates:** if this UUID already has a row, overwrite it
+ *    (new Data Name + refreshed Discord Name) → `{ ok:true, action:'updated' }`.
+ *  - **Otherwise append** a new row at the end → `{ ok:true, action:'created' }`.
+ *
+ * Row shape written is A:C = `[ dataName, discordName, uuid ]`.
+ *
+ * @returns {Promise<{ok:true, action:'created'|'updated', rowIndex:number}
+ *                   |{ok:false, reason:'NAME_TAKEN', takenBy:string}>}
+ */
+async function registerRosterEntry({ sheets, auth, spreadsheetId, uuid, dataName, discordName }) {
+    const cleanName = (dataName || '').trim();
+    const res = await sheets.spreadsheets.values.get({
+        auth,
+        spreadsheetId,
+        range: `${ROSTER_TAB}!A:C`
+    });
+    const rows = res.data.values || [];
+
+    // Name-clash guard: same Data Name (case-insensitive) held by a different UUID.
+    const nameLc = cleanName.toLowerCase();
+    for (const row of rows) {
+        if (!row) continue;
+        const rowName = (row[ROSTER_COL.DATA_NAME] || '').trim().toLowerCase();
+        const rowUuid = row[ROSTER_COL.UUID];
+        if (rowName && rowName === nameLc && rowUuid && rowUuid !== uuid) {
+            return { ok: false, reason: 'NAME_TAKEN', takenBy: rowUuid };
+        }
+    }
+
+    const values = [[cleanName, discordName, uuid]];
+    const existing = findRosterEntry(rows, uuid);
+
+    if (existing) {
+        await sheets.spreadsheets.values.update({
+            auth,
+            spreadsheetId,
+            range: `${ROSTER_TAB}!A${existing.rowIndex}:C${existing.rowIndex}`,
+            valueInputOption: 'RAW',
+            requestBody: { values }
+        });
+        return { ok: true, action: 'updated', rowIndex: existing.rowIndex };
+    }
+
+    const nextRow = rows.length + 1; // 1-based append target
+    await sheets.spreadsheets.values.update({
+        auth,
+        spreadsheetId,
+        range: `${ROSTER_TAB}!A${nextRow}:C${nextRow}`,
+        valueInputOption: 'RAW',
+        requestBody: { values }
+    });
+    return { ok: true, action: 'created', rowIndex: nextRow };
+}
+
 module.exports = {
     ROSTER_TAB,
     ROSTER_COL,
     findRosterEntry,
     lookupRosterEntry,
-    refreshDiscordName
+    refreshDiscordName,
+    registerRosterEntry
 };

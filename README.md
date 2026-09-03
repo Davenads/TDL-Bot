@@ -21,10 +21,12 @@ index.js              Bootstrap: command loader, Sheets auth, interaction router
 deploy-commands.js    Registers slash commands to the TEST and PROD guilds
 commands/
   signup.js           /signup wizard + Google Sheets upsert
+  register.js         /register — add/update a player in the Roster tab
 utils/
   googleAuth.js       Service-account JWT auth
   redisClient.js      Optional Redis connection
   tdlWeekUtils.js     Registration-window gate, week math, timestamp formatting
+  rosterUtils.js      Roster read/lookup, username refresh, register upsert
 plan/                 Design docs (source of truth for decisions)
 ```
 
@@ -43,9 +45,27 @@ Behavior:
 - **Roster gate:** checks the `Roster` tab (`Data Name | Discord Name | Discord UUID`)
   by UUID up front — users not on the roster are blocked. On a match it resolves the
   Data Name (shown in the confirmation) and refreshes the stored Discord username if
-  it drifted. A future `/register` command will add users to the roster.
+  it drifted. Use `/register` to get on the roster.
 - Registration window: opens Tuesday 12:00 AM ET, closes Sunday 11:59 PM ET (all day
   Monday is closed so matchups can be built before the event).
+
+## `/register`
+
+Adds (or updates) a player in the `Roster` tab — the identity that `/signup` gates on.
+
+```
+/register data_name:<name> [user:@member]
+```
+
+- **Self-serve:** anyone runs `/register data_name:<name>` to add themselves. No
+  `@Dueler` role required — this is the onboarding entry point (register → get
+  `@Dueler` → `/signup`).
+- **Admins** (holders of `TDL_ADMIN_ROLE_NAME`, or members with the Manage Server
+  permission) may register/fix another member via the optional `user:` option.
+- **Re-register** with the same account updates your row (Data Name + username) — fix
+  your own typos.
+- **Name clash blocked:** a Data Name already held by a different player is refused.
+- Writes `[Data Name, Discord Name, Discord UUID]`; confirmation is ephemeral.
 
 ## Setup
 
@@ -73,6 +93,7 @@ Behavior:
 | `GOOGLE_PRIVATE_KEY` | Service-account key (real newlines on Heroku; `\n`-escaped locally) |
 | `TEST_MODE` | `true` -> Registration Test tab; `false` -> Registration tab |
 | `DUELER_ROLE_NAME` | Role name required for `/signup` (default `Dueler`) |
+| `TDL_ADMIN_ROLE_NAME` | Optional role name allowed to register others via `/register`; Manage-Server members can too |
 | `SIGNUP_CHANNEL_ID` | Optional channel for public confirmations; defaults to invoking channel |
 | `REDISCLOUD_URL` | Optional Redis URL (phase-2 caching) |
 
@@ -96,3 +117,4 @@ See `plan/` for the full design and decision records:
 - `04-google-form-retirement.md`
 - `05-heroku-hosting.md`
 - `06-google-cloud-setup.md`
+- `07-redis-caching.md`

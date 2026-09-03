@@ -134,15 +134,15 @@ prompt) against the `Roster` tab (`Data Name | Discord Name | Discord UUID`) key
 the user's **UUID**:
 
 - **Not matched → STOP.** Reply ephemerally that they're not on the TDL roster yet
-  and must be added first (an admin edits the sheet today; a future `/register`
-  command automates it). No division prompt, no sheet write.
+  and must register first (via `/register`, or an admin adds them). No division
+  prompt, no sheet write.
 - **Matched → proceed**, carrying the resolved **Data Name** through to the public
   confirmation (which leads with it). If their stored `Discord Name` (Roster col B)
   no longer matches their live username, **fire-and-forget** overwrite col B with the
   current name after the Registration write — keeping the volatile usernames fresh.
 
 The bot never **invents** a Data Name and never inserts roster rows here — creation is
-`/register`'s job (deferred). The gate read failing (Sheets 4xx/5xx) should fail
+`/register`'s job. The gate read failing (Sheets 4xx/5xx) should fail
 **closed** with a "try again later" message; the post-write col-B refresh failing must
 **never** fail the signup (row already written) — swallow and log. Mechanics live in
 `02-sheets-integration.md`; decisions in `03-decisions.md` (rows 11–14).

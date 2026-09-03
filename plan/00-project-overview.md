@@ -1,7 +1,8 @@
 # TDL-Bot — Project Overview (Planning)
 
-> **Status:** Scaffold built. `/signup` implemented (not yet Discord-tested or
-> deployed). This folder is the source of truth for design decisions.
+> **Status:** Scaffold built. `/signup` and `/register` implemented + unit-tested
+> (not yet Discord-tested or deployed). This folder is the source of truth for
+> design decisions.
 
 ## What is TDL-Bot?
 
@@ -124,10 +125,18 @@ Same dual-mode pattern as DFC-Data:
 | Sheet tab | `Registration Test` | `Registration` |
 | Bot token / client ID | Test app | Prod app |
 
+## Implemented commands
+
+- **`/signup`** — weekly-event signup wizard (window + `@Dueler` + roster gates,
+  upsert to `Registration`, public confirmation with Data Name). See `01`.
+- **`/register`** — appends/updates a player in the `Roster` tab (`Data Name |
+  Discord Name | Discord UUID`); the write path that populates the `/signup` gate.
+  Hybrid model (self-serve + admin override). See `03` rows 14–18.
+
 ## Deferred / Future scope (not now)
 
-- `/register` command — appends a player to the `Roster` tab (`Data Name |
-  Discord Name | Discord UUID`); the write path that populates the `/signup` gate
+- **Redis caching** — cache the roster (and later recent-signups / standings) to
+  cut Sheets reads on the `/signup` hot path. **Planning:** `07-redis-caching.md`.
 - `/standings`, `/elo`, `/results`, `/builds` read commands (report-style, like DFC)
 - Result reporting command (writes to `Results`)
 - Signup-window open/close announcements via cron
@@ -137,7 +146,9 @@ Same dual-mode pattern as DFC-Data:
 
 - `00-project-overview.md` — this file
 - `01-signup-command.md` — the focal feature: `/signup` flow, window, sheet writes
-- `02-sheets-integration.md` — auth, read/write, dedupe, env config
+- `02-sheets-integration.md` — auth, read/write, dedupe, roster, env config
 - `03-decisions.md` — resolved decisions (was open questions)
 - `04-google-form-retirement.md` — why the Form is retired; bot-only rationale
 - `05-heroku-hosting.md` — Heroku deploy model, config vars, dyno, ops
+- `06-google-cloud-setup.md` — service account / Sheets API access setup
+- `07-redis-caching.md` — Redis caching strategy (what/where/TTL/invalidation)

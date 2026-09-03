@@ -18,7 +18,11 @@ the source of truth; `01` and `02` reflect these.
 | 11 | Roster as a gate? | **Yes — required.** `/signup` checks the invoking user's UUID against `Roster` (col C). **Not on the roster → blocked** with a "get added first" message; this is a hard guard alongside the `@Dueler` role. The bot never invents a Data Name — membership is created out-of-band (see row 14). |
 | 12 | Roster username refresh | **Yes.** On a UUID match with a stale `Discord Name`, fire-and-forget overwrite of `Roster!B` with the live username. The bot therefore has **write** access to `Roster`. |
 | 13 | Data Name in public confirmation | **Yes.** Since roster membership is now required, the Data Name always resolves — lead the confirmation with it (no UUID). |
-| 14 | `/register` command | **Planned (future).** A `/register` slash command will **append** a player to `Roster` (`Data Name \| Discord Name \| Discord UUID`) — the write path that populates the gate above. Deferred; not built now. |
+| 14 | `/register` command | **Built.** Appends/updates a player in `Roster` (`Data Name \| Discord Name \| Discord UUID`) — the write path that populates the gate above. Model below (rows 15–18). |
+| 15 | `/register` who | **Hybrid.** Anyone self-registers (`/register data_name:<name>`); admins may also register/fix others via an optional `user:` target. "Admin" = holds `TDL_ADMIN_ROLE_NAME` (optional) **or** has the Manage Server permission. |
+| 16 | `/register` gate | **Open to any guild member** (no `@Dueler` needed) — `/register` is the onboarding entry point: register → get `@Dueler` → `/signup`. |
+| 17 | Re-register (same UUID) | **Update in place** — overwrite the caller's Data Name + refresh the stored username. Lets players fix their own typos. |
+| 18 | Data Name clash | **Blocked** — a name already held by a *different* UUID (case-insensitive) is refused (`NAME_TAKEN`). Prevents claiming another player's ranking identity. Only protects names already present in `Roster`. |
 
 ## Still-open / minor (non-blocking, safe defaults chosen)
 
@@ -39,7 +43,7 @@ the source of truth; `01` and `02` reflect these.
 - `/signup` requires roster membership (UUID in `Roster` col C) **and** the `@Dueler`
   role; the roster supplies the **Data Name** join for rankings/reports.
 - The bot has **read + write** access to `Roster` (write is used by the col-B username
-  refresh now, and by the future `/register` command).
+  refresh and by the `/register` command).
 - One shared `Roster` tab (not `TEST_MODE`-split); only the Registration write target
   flips between test/prod.
 - Low concurrency → simple read-then-write upsert is fine.

@@ -10,6 +10,7 @@ const {
     findRosterEntry,
     lookupRosterEntry,
     refreshDiscordName,
+    registerRosterEntry,
     ROSTER_TAB
 } = require('../utils/rosterUtils');
 
@@ -125,6 +126,56 @@ test('refreshDiscordName is a no-op with a missing entry or username', async () 
     assert.strictEqual(await refreshDiscordName({ sheets: api, auth: AUTH, spreadsheetId: SHEET_ID, entry: null, username: 'x' }), false);
     assert.strictEqual(await refreshDiscordName({ sheets: api, auth: AUTH, spreadsheetId: SHEET_ID, entry: { rowIndex: 2, discordName: 'a' }, username: '' }), false);
     assert.strictEqual(updates.length, 0);
+});
+
+test('registerRosterEntry appends a new player at the next row (A:C)', async () => {
+    const { api, updates } = makeSheets([HEADER, ['Toe', 'toeshank', 'U1']]);
+    const result = await registerRosterEntry({
+        sheets: api, auth: AUTH, spreadsheetId: SHEET_ID, uuid: 'U2', dataName: 'Ally', discordName: 'alice'
+    });
+    assert.deepStrictEqual(result, { ok: true, action: 'created', rowIndex: 3 });
+    assert.strictEqual(updates.length, 1);
+    assert.strictEqual(updates[0].range, `${ROSTER_TAB}!A3:C3`);
+    assert.deepStrictEqual(updates[0].values, ['Ally', 'alice', 'U2']);
+});
+
+test('registerRosterEntry trims the Data Name before writing', async () => {
+    const { api, updates } = makeSheets([HEADER]);
+    const result = await registerRosterEntry({
+        sheets: api, auth: AUTH, spreadsheetId: SHEET_ID, uuid: 'U9', dataName: '  Carol  ', discordName: 'carol'
+    });
+    assert.strictEqual(result.action, 'created');
+    assert.strictEqual(updates[0].values[0], 'Carol');
+});
+
+test('registerRosterEntry updates the existing row when the UUID is already present', async () => {
+    const { api, updates } = makeSheets([HEADER, ['OldName', 'old_alice', 'U1']]);
+    const result = await registerRosterEntry({
+        sheets: api, auth: AUTH, spreadsheetId: SHEET_ID, uuid: 'U1', dataName: 'NewName', discordName: 'alice2'
+    });
+    assert.deepStrictEqual(result, { ok: true, action: 'updated', rowIndex: 2 });
+    assert.strictEqual(updates.length, 1);
+    assert.strictEqual(updates[0].range, `${ROSTER_TAB}!A2:C2`);
+    assert.deepStrictEqual(updates[0].values, ['NewName', 'alice2', 'U1']);
+});
+
+test('registerRosterEntry blocks a Data Name held by a different UUID (case-insensitive)', async () => {
+    const { api, updates } = makeSheets([HEADER, ['Toe', 'toeshank', 'U1']]);
+    const result = await registerRosterEntry({
+        sheets: api, auth: AUTH, spreadsheetId: SHEET_ID, uuid: 'U2', dataName: 'TOE', discordName: 'imposter'
+    });
+    assert.deepStrictEqual(result, { ok: false, reason: 'NAME_TAKEN', takenBy: 'U1' });
+    assert.strictEqual(updates.length, 0, 'no write on a name clash');
+});
+
+test('registerRosterEntry allows keeping your own name on re-register (same UUID)', async () => {
+    const { api, updates } = makeSheets([HEADER, ['Toe', 'toeshank', 'U1']]);
+    const result = await registerRosterEntry({
+        sheets: api, auth: AUTH, spreadsheetId: SHEET_ID, uuid: 'U1', dataName: 'Toe', discordName: 'toeshank_new'
+    });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.action, 'updated');
+    assert.deepStrictEqual(updates[0].values, ['Toe', 'toeshank_new', 'U1']);
 });
 
 // Run -----------------------------------------------------------------------

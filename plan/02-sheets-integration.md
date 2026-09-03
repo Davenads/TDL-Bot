@@ -120,10 +120,24 @@ stored `Discord Name` differs from their live username, the bot overwrites col B
 ### Write access — DECIDED
 
 The service account needs **Editor** on the sheet (already required for
-Registration). The bot writes to `Roster` for the col-B refresh above and, in future,
-for **`/register`** (appends `[ Data Name, Discord Name, Discord UUID ]` — the write
-path that populates the gate). `/register` is deferred; noted here so the write scope
-is planned, not retrofitted.
+Registration). The bot writes to `Roster` for the col-B refresh above and for
+**`/register`**.
+
+### `/register` write (upsert) — BUILT
+
+`registerRosterEntry` (in `utils/rosterUtils.js`) reads `Roster!A:C`, then:
+
+1. **Name-clash guard:** if the Data Name (case-insensitive, trimmed) is already
+   held by a **different** UUID → return `{ ok:false, reason:'NAME_TAKEN' }` and
+   write nothing. Stops one player claiming another's ranking identity.
+2. **Existing UUID → update in place:** `values.update` at `Roster!A{n}:C{n}` with
+   `[ dataName, discordName, uuid ]` → `{ ok:true, action:'updated' }`.
+3. **New UUID → append:** `values.update` at `Roster!A{next}:C{next}` where
+   `next = rows.length + 1` → `{ ok:true, action:'created' }`.
+
+The command (`commands/register.js`) resolves the target (self, or another member
+when an admin passes `user:`), guards bots/empty names, and reports created vs.
+updated vs. name-taken ephemerally. See `03-decisions.md` rows 14–18 for the model.
 
 ### Join direction (why this matters)
 
