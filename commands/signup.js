@@ -14,6 +14,10 @@ const {
     getEventDateString,
     formatSheetTimestamp
 } = require('../utils/tdlWeekUtils');
+const {
+    lookupRosterEntry,
+    refreshDiscordName
+} = require('../utils/rosterUtils');
 
 // ---- Config ----
 const DUELER_ROLE = process.env.DUELER_ROLE_NAME || 'Dueler';
@@ -71,6 +75,29 @@ function noRoleEmbed() {
         .setColor(WARN_COLOR)
         .setTitle('Missing Role')
         .setDescription(`You need the **@${DUELER_ROLE}** role to sign up for TDL.`)
+        .setFooter({ text: 'Toeshank Dueling League' })
+        .setTimestamp();
+}
+
+function notOnRosterEmbed() {
+    return new EmbedBuilder()
+        .setColor(WARN_COLOR)
+        .setTitle('Not on the Roster')
+        .setDescription(
+            "You're not on the TDL roster yet, so you can't sign up.\n\n" +
+            'Ask a league admin to add you to the roster, then run `/signup` again.'
+        )
+        .setFooter({ text: 'Toeshank Dueling League' })
+        .setTimestamp();
+}
+
+function rosterErrorEmbed() {
+    return new EmbedBuilder()
+        .setColor(WARN_COLOR)
+        .setTitle('Signup Unavailable')
+        .setDescription(
+            'Could not verify the roster right now. Please try `/signup` again in a moment.'
+        )
         .setFooter({ text: 'Toeshank Dueling League' })
         .setTimestamp();
 }
@@ -146,7 +173,7 @@ module.exports = {
         .setName('signup')
         .setDescription('Sign up for the weekly Toeshank Dueling League event'),
 
-    async execute(interaction) {
+    async execute(interaction, sheets, auth) {
         const timestamp = new Date().toISOString();
         const user = interaction.user;
 
@@ -170,6 +197,22 @@ module.exports = {
         if (!hasDuelerRole(interaction)) {
             console.log(`[${timestamp}] Signup blocked (no ${DUELER_ROLE} role) for ${user.tag} (${user.id})`);
             await interaction.reply({ embeds: [noRoleEmbed()], ephemeral: true });
+            return;
+        }
+
+        // Roster gate — the user must exist in the Roster tab (by UUID) to sign up.
+        // Fail CLOSED on a lookup error so a Sheets hiccup can't bypass the gate.
+        let rosterEntry;
+        try {
+            rosterEntry = await lookupRosterEntry({ sheets, auth, spreadsheetId: SPREADSHEET_ID, uuid: user.id });
+        } catch (error) {
+            console.error(`[${timestamp}] Roster lookup failed for ${user.tag} (${user.id}):`, error.message);
+            await interaction.reply({ embeds: [rosterErrorEmbed()], ephemeral: true });
+            return;
+        }
+        if (!rosterEntry) {
+            console.log(`[${timestamp}] Signup blocked (not on roster) for ${user.tag} (${user.id})`);
+            await interaction.reply({ embeds: [notOnRosterEmbed()], ephemeral: true });
             return;
         }
 
@@ -253,8 +296,27 @@ module.exports = {
         const uuid = user.id;
         const username = user.username || user.globalName || user.tag || 'Unknown';
 
+        // Re-resolve the roster entry for the Data Name (membership was gated at
+        // /signup; interactions don't share state). Non-fatal — fall back to the
+        // Discord username for display if the lookup fails.
+        let rosterEntry = null;
+        try {
+            rosterEntry = await lookupRosterEntry({ sheets, auth, spreadsheetId: SPREADSHEET_ID, uuid });
+        } catch (rosterErr) {
+            console.error(`[${timestamp}] Roster re-lookup failed for ${user.tag} (${user.id}) (non-fatal):`, rosterErr.message);
+        }
+        const dataName = (rosterEntry && rosterEntry.dataName) || username;
+
         try {
             const results = await upsertSignups({ sheets, auth, uuid, username, notes, divisions });
+
+            // Fire-and-forget: refresh the roster's stored Discord Name if it drifted.
+            // Never block or fail the signup on this — the Registration row is written.
+            if (rosterEntry) {
+                refreshDiscordName({ sheets, auth, spreadsheetId: SPREADSHEET_ID, entry: rosterEntry, username })
+                    .then(did => { if (did) console.log(`[${timestamp}] Roster Discord Name refreshed for ${uuid}`); })
+                    .catch(refErr => console.error(`[${timestamp}] Roster refresh failed for ${uuid} (non-fatal):`, refErr.message));
+            }
 
             const createdCount = results.filter(r => r.action === 'created').length;
             const updatedCount = results.filter(r => r.action === 'updated').length;
@@ -286,7 +348,7 @@ module.exports = {
             const publicEmbed = new EmbedBuilder()
                 .setColor(OK_COLOR)
                 .setDescription(
-                    `**${username}** ${action} — ${getEventDateString()}, 6:00 PM ET\n` +
+                    `**${dataName}** ${action} — ${getEventDateString()}, 6:00 PM ET\n` +
                     `**Division:** ${CATEGORY_LABEL[category]}` +
                     (notes ? `\n**Notes:** ${notes}` : '')
                 )
