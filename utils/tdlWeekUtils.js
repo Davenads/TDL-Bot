@@ -91,7 +91,7 @@ function filterCurrentWeekSignups(rows, skipHeader = true) {
 }
 
 /**
- * Format a timestamp to match the existing Google Form's Sheets-native format,
+ * Format a timestamp to match the retired Google Form's Sheets-native format,
  * e.g. "8/31/2026 18:05:03" (ET, 24-hour, no leading zeros on M/D/H).
  * Keeping this format lets the Looker Studio report parse the column unchanged.
  * @param {Date} date

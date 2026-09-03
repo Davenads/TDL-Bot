@@ -73,7 +73,7 @@ instead **write directly to the Google Sheet via the Sheets API** (`values.appen
 
 ### Registration tab columns
 
-**Current (form-driven):** `Status | Timestamp | Email Address | Name | Notes | Category`
+**Legacy (form-driven, retired):** `Status | Timestamp | Email Address | Name | Notes | Category`
 
 **New (bot-driven, DECIDED):** `Timestamp | Discord UUID | Discord Username | Notes | Category`
 

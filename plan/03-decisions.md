@@ -10,7 +10,7 @@ the source of truth; `01` and `02` reflect these.
 | 3 | Registration window | **Closes one day before the event** so Toeshank can build matchups. Event = Mon 6PM ET → registration **closes end of Sunday (Sun 11:59 PM ET)**; **opens Tue 12:00 AM ET**. Monday is closed (organize + event day). |
 | 4 | Role gating | Require the **@Dueler** role to use `/signup`. |
 | 5 | Duplicate policy | **Yes, upsert.** One signup per player per division per week. Re-running replaces that player's existing row for that division. Dedupe key = (Discord UUID + Category). |
-| 6 | Timestamp format | **Match the existing Form's** Sheets-native format (`M/D/YYYY H:mm:ss`) so the Looker report parses it. |
+| 6 | Timestamp format | **Match the retired Form's** Sheets-native format (`M/D/YYYY H:mm:ss`) so the Looker report keeps parsing. Bot writes this via `formatSheetTimestamp`. |
 | 7 | Service account | **Reuse DFC's** existing Google service account (must be granted Editor on the TDL sheet). |
 | 8 | Confirmation visibility | **Public for now** — post a visible "X signed up for Monday TDL" message (division shown). |
 | 9 | Google Form | **Retired.** Bot is the sole signup path. Forms can't reliably capture a Discord UUID; every path that gets a trustworthy UUID into the sheet runs through the bot anyway. |

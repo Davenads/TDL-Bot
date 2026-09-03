@@ -87,13 +87,15 @@ refresh after a successful write.
 
 ## Timestamp format
 
-DFC writes ISO strings for its own tabs but the **Registration** tab is currently
-fed by a Google Form, which writes Sheets-native datetimes like `M/D/YYYY H:mm:ss`.
-The Looker Studio report likely parses that format.
+DFC writes ISO strings for its own tabs. The **Registration** tab was historically
+fed by a Google Form (now **retired** — the bot is the sole writer), which wrote
+Sheets-native datetimes like `M/D/YYYY H:mm:ss`. The Looker Studio report parses
+that format.
 
-**Decision needed:** write timestamps in the **same format the existing Form uses**
-so downstream parsing (report, standings, ELO date logic) stays intact. Verify by
-inspecting a few existing `Registration` rows.
+**DECIDED:** the bot writes timestamps in the **same Sheets-native format the old
+Form used** (`M/D/YYYY H:mm:ss`) so downstream parsing (report, standings, ELO date
+logic) stays intact. Implemented in `tdlWeekUtils.formatSheetTimestamp`. Verify
+against a few existing `Registration` rows if the report ever mis-parses.
 
 ## Risks
 
@@ -101,5 +103,8 @@ inspecting a few existing `Registration` rows.
   `nextRow`. Low volume (a niche weekly event) makes this unlikely, but `values.append`
   with `INSERT_ROWS` avoids the race for pure inserts. Upserts still read-then-write;
   acceptable at this scale. Note and revisit if volume grows.
-- **Schema drift:** if we reshape the Registration tab, the existing Google Form and
-  the Looker report bindings break. Prefer an additive approach (see open questions).
+- **Schema drift:** reshaping the Registration tab is safe on the Form side — the
+  Google Form is **retired**, so there is no `formResponse` binding left to break
+  (see `04-google-form-retirement.md`). The only downstream binding to preserve is
+  the **Looker Studio report**; keep the reshaped columns and the Sheets-native
+  timestamp format (above) so it keeps parsing.
