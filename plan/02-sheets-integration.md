@@ -75,6 +75,53 @@ each keyed on **(UUID + Category)** within the current week. Sequence them (read
 resolve both rows → write) so the second write sees the row the first may have added.
 At this volume, two sequential `values.update` calls are fine.
 
+## Roster tab (Discord ↔ Data Name map)
+
+The `Roster` tab maps a Discord account to its in-data identity:
+
+| Col | Field | Notes |
+|---|---|---|
+| A | `Data Name` | How the player appears in dueling data / rankings. **Bot never invents this.** |
+| B | `Discord Name` | Last-parsed Discord username — **volatile** (changes ~every 2 weeks). |
+| C | `Discord UUID` | **Stable join key.** Match on this, never on the name. |
+
+### Read / lookup
+
+```js
+sheets.spreadsheets.values.get({
+  auth,
+  spreadsheetId: process.env.TDL_SPREADSHEET_ID,
+  range: 'Roster!A:C',
+});
+```
+
+- Build a `uuid → { dataName, discordName, rowIndex }` map (skip header).
+- On `/signup`, look up the invoking user's UUID:
+  - **Found** → resolve `Data Name` for display/enrichment.
+  - **Not found** → signup still proceeds; `Data Name` is treated as unknown. The
+    roster is **enrichment, not a gate** (the `@Dueler` role already gates access).
+
+> Roster is **not** environment-split — there is one `Roster` tab regardless of
+> `TEST_MODE`. Only the `Registration`/`Registration Test` write target flips.
+
+### Opportunistic Discord Name refresh (proposed)
+
+Because col B drifts, when a signing-up user's UUID matches a roster row but the
+stored `Discord Name` differs from their live username, the bot can overwrite col B:
+
+- `values.update` at `Roster!B{rowIndex}` with the current username.
+- **Fire-and-forget**, after the Registration write succeeds — never block the
+  signup on it, and swallow/log failures.
+- Only touches col B on a **UUID match**; never adds roster rows (no Data Name to
+  supply).
+
+### Join direction (why this matters)
+
+`Registration` stores `Discord UUID` on every row, so reports can join
+`Registration.UUID → Roster.UUID → Data Name` to tie signups (and later Results/ELO)
+back to the rankings identity. We do **not** duplicate `Data Name` into the
+Registration rows — it lives in one place (Roster) and is joined on demand.
+
 ## Caching (optional, phase 2)
 
 Port DFC's `signupsCache.js` for read-heavy commands later (`/recentsignups`).

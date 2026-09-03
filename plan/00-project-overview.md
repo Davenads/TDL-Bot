@@ -64,6 +64,7 @@ instead **write directly to the Google Sheet via the Sheets API** (`values.appen
 | `Results` | Match results — Timestamp, Email, Winner, Winner Build, Loser, Loser Build, Winner Score, Loser Score, Notes, Mirror, Title, Category |
 | `Registration` | Weekly event signups (live) |
 | `Registration Test` | Signups (QA) |
+| `Roster` | Dueler identity map — `A` Data Name (rankings/data display), `B` Discord Name (last-parsed username, changes over time), `C` Discord UUID (stable join key) |
 | `Standings` | League standings |
 | `Ruleset` | Rules |
 | `Builds` | Build list |
@@ -82,6 +83,23 @@ instead **write directly to the Google Sheet via the Sheets API** (`values.appen
 > Form cannot reliably capture a Discord UUID (its only injection path, pre-filled
 > links, produces a user-editable field and still requires the bot in the loop). The
 > bot writes rows directly via the Sheets API. See `04-google-form-retirement.md`.
+
+### Roster tab — the Discord ↔ Data Name map
+
+The `Roster` tab (`A` Data Name · `B` Discord Name · `C` Discord UUID) is the
+identity bridge between a player's Discord account and how they appear in the
+dueling data / rankings. This is the **Discord ↔ in-game-name mapping** that was
+previously deferred — it now exists as a real tab.
+
+- **`Discord UUID` (col C) is the stable join key.** Usernames drift (Discord allows
+  a change every ~2 weeks), so never key on the name.
+- The bot **reads** `Roster` on `/signup` to resolve the player's Data Name and can
+  **opportunistically refresh** col B (Discord Name) when the UUID matches but the
+  stored name is stale — keeping the roster's usernames current for free.
+- The bot does **not** invent Data Names. A player absent from the roster still
+  signs up fine (roster is **enrichment, not a gate**); Data Name resolves to unknown
+  until an admin adds them. See `02-sheets-integration.md` for mechanics and
+  `03-decisions.md` for the open calls.
 
 ## Categories
 
@@ -108,7 +126,6 @@ Same dual-mode pattern as DFC-Data:
 
 - `/standings`, `/elo`, `/results`, `/builds` read commands (report-style, like DFC)
 - Result reporting command (writes to `Results`)
-- Discord ↔ in-game-name mapping (needed to link signups to Results/ELO)
 - Signup-window open/close announcements via cron
 - `/cancelsignup`
 

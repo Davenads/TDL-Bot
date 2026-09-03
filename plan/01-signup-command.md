@@ -29,6 +29,8 @@ The first and focal feature. Lets a player register for the weekly Monday event.
   └─ Step 3: modal submit → deferReply(ephemeral)
         • Build row: [ timestamp, discordUUID, discordUsername, notes, category ]
         • Upsert into sheet (see Duplicate handling below)
+        • Roster: look up UUID → resolve Data Name; if matched & username stale,
+          fire-and-forget refresh of Roster col B (see Roster enrichment below)
         • Refresh signups cache (fire-and-forget)
         • Reply: green confirmation embed (division, notes, week label)
 ```
@@ -120,6 +122,25 @@ A **"Both"** selection expands into **two independent rows**: one `HLD` and one
   updated; their `LLD` row is left as-is (we do **not** auto-remove divisions — a
   future `/cancelsignup` handles removal).
 
+## Roster enrichment (Discord ↔ Data Name)
+
+On submit, after the Registration write, the bot consults the `Roster` tab
+(`Data Name | Discord Name | Discord UUID`) keyed on the user's **UUID**:
+
+- **Matched:** resolve the player's **Data Name** (their rankings/data identity).
+  Optionally surface it in the confirmation (e.g. "signed up as **<DataName>**").
+  If their stored `Discord Name` (Roster col B) no longer matches their live
+  username, **fire-and-forget** overwrite col B with the current name — this keeps
+  the roster's volatile usernames fresh at zero extra effort.
+- **Not matched:** signup still succeeds. Roster is **enrichment, not a gate**
+  (the `@Dueler` role is the actual gate). Data Name is simply unknown; an admin
+  adds the player to the roster later. The bot never invents a Data Name and never
+  inserts roster rows.
+
+Failures here must never fail the signup — the Registration row is already written;
+roster read/refresh errors are swallowed and logged. Mechanics live in
+`02-sheets-integration.md`; open calls in `03-decisions.md`.
+
 ## Permissions / roles — DECIDED
 
 - `/signup` requires the **@Dueler** role.
@@ -163,3 +184,6 @@ Implementation notes:
   confirmations post in the invoking channel (default). **Implemented.**
 - On an **update** (re-signup), phrase it as "updated their TDL signup" to avoid
   spam confusion.
+- If the Roster resolves a **Data Name**, the confirmation may lead with it
+  (e.g. "✅ **<DataName>** signed up …") for roster/ranking recognition; fall back
+  to the Discord display name when unmatched. Still no UUID in the public message.

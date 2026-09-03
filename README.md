@@ -40,6 +40,9 @@ Behavior:
 - **Both** expands to two rows (one HLD, one LLD).
 - Upsert keyed on **(UUID + Category)** within the current week — re-running replaces
   that division's row rather than duplicating it.
+- Reads the `Roster` tab (`Data Name | Discord Name | Discord UUID`) keyed on UUID to
+  resolve the player's Data Name and optionally refresh their stored Discord username.
+  Enrichment only — not a signup gate.
 - Registration window: opens Tuesday 12:00 AM ET, closes Sunday 11:59 PM ET (all day
   Monday is closed so matchups can be built before the event).
 
@@ -51,6 +54,8 @@ Behavior:
 4. Ensure the Registration tab header is:
    `Timestamp | Discord UUID | Discord Username | Notes | Category`
    (use `Registration Test` for QA with `TEST_MODE=true`).
+   Also ensure a `Roster` tab exists with columns
+   `Data Name | Discord Name | Discord UUID` (one shared tab across test/prod).
 5. Register commands: `node deploy-commands.js`
 6. Start: `npm start`
 

@@ -14,8 +14,16 @@ the source of truth; `01` and `02` reflect these.
 | 7 | Service account | **Reuse DFC's** existing Google service account (must be granted Editor on the TDL sheet). |
 | 8 | Confirmation visibility | **Public for now** — post a visible "X signed up for Monday TDL" message (division shown). |
 | 9 | Google Form | **Retired.** Bot is the sole signup path. Forms can't reliably capture a Discord UUID; every path that gets a trustworthy UUID into the sheet runs through the bot anyway. |
+| 10 | Roster tab role | **Identity map, read on signup.** `Roster` = `Data Name \| Discord Name \| Discord UUID`. Join on **UUID** (col C) — the stable key; `Discord Name` drifts. This is the Discord ↔ in-game-name mapping (was deferred). See `02-sheets-integration.md`. |
+| 11 | Roster as a gate? | **No — enrichment, not a gate.** Absent-from-roster users still sign up (the `@Dueler` role is the gate). Data Name resolves to unknown until an admin adds them. The bot never invents a Data Name. |
 
 ## Still-open / minor (non-blocking, safe defaults chosen)
+
+- **Roster username refresh:** proposed — on a UUID match with a stale `Discord Name`,
+  fire-and-forget overwrite of Roster col B with the live username. Keeps the roster
+  fresh for free. Confirm we want the bot writing to `Roster` at all (vs. read-only).
+- **Data Name in public confirmation:** proposed — lead the confirmation with the
+  resolved Data Name when matched, else the Discord display name. Confirm preference.
 
 - **Command surface:** button + modal wizard (DFC-style). Can revisit vs. plain
   slash options.
@@ -31,5 +39,8 @@ the source of truth; `01` and `02` reflect these.
 - Event: **Monday 6:00 PM ET**, ~4 hours.
 - Bot writes to `Registration Test` in `TEST_MODE`, `Registration` in prod.
 - Direct Sheets write (not a Form POST) to capture Discord UUID.
-- No in-game-name mapping needed for signup (Discord UUID + username suffice).
+- Discord UUID + username suffice to *write* a signup; the `Roster` tab supplies the
+  optional **Data Name** join for rankings/reports (keyed on UUID).
+- One shared `Roster` tab (not `TEST_MODE`-split); only the Registration write target
+  flips between test/prod.
 - Low concurrency → simple read-then-write upsert is fine.
