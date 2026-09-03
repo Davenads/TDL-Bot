@@ -15,6 +15,7 @@ const {
     formatSheetTimestamp
 } = require('../utils/tdlWeekUtils');
 const {
+    getRosterMap,
     lookupRosterEntry,
     refreshDiscordName
 } = require('../utils/rosterUtils');
@@ -201,10 +202,12 @@ module.exports = {
         }
 
         // Roster gate — the user must exist in the Roster tab (by UUID) to sign up.
+        // Uses the cached roster map (read-through Redis; /register evicts it).
         // Fail CLOSED on a lookup error so a Sheets hiccup can't bypass the gate.
         let rosterEntry;
         try {
-            rosterEntry = await lookupRosterEntry({ sheets, auth, spreadsheetId: SPREADSHEET_ID, uuid: user.id });
+            const rosterMap = await getRosterMap({ sheets, auth, spreadsheetId: SPREADSHEET_ID });
+            rosterEntry = rosterMap[user.id] || null;
         } catch (error) {
             console.error(`[${timestamp}] Roster lookup failed for ${user.tag} (${user.id}):`, error.message);
             await interaction.reply({ embeds: [rosterErrorEmbed()], ephemeral: true });

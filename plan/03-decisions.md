@@ -23,6 +23,7 @@ the source of truth; `01` and `02` reflect these.
 | 16 | `/register` gate | **Open to any guild member** (no `@Dueler` needed) — `/register` is the onboarding entry point: register → get `@Dueler` → `/signup`. |
 | 17 | Re-register (same UUID) | **Update in place** — overwrite the caller's Data Name + refresh the stored username. Lets players fix their own typos. |
 | 18 | Data Name clash | **Blocked** — a name already held by a *different* UUID (case-insensitive) is refused (`NAME_TAKEN`). Prevents claiming another player's ranking identity. Only protects names already present in `Roster`. |
+| 19 | Roster caching | **Redis read-through, Phase A built.** The `/signup` gate reads a cached `uuid→{…}` map (`tdl:roster`, 10-min TTL); `/register` **evicts** it so a new member can sign up immediately. Cache is read/gate/display only — write paths (`lookupRosterEntry` col-B refresh, `registerRosterEntry`) read the sheet **fresh** to avoid a stale `rowIndex`. Redis down/absent → full live-Sheets fallback (fail-open on cache, fail-closed on the gate's Sheets read). See `07-redis-caching.md`. |
 
 ## Still-open / minor (non-blocking, safe defaults chosen)
 
@@ -47,3 +48,5 @@ the source of truth; `01` and `02` reflect these.
 - One shared `Roster` tab (not `TEST_MODE`-split); only the Registration write target
   flips between test/prod.
 - Low concurrency → simple read-then-write upsert is fine.
+- Redis is a cache only, never the source of truth; the sheet is authoritative and
+  everything degrades to live Sheets reads if Redis is unavailable.

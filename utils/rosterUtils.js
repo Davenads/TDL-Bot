@@ -11,7 +11,14 @@
  * (resolve the Data Name for the confirmation, opportunistically refresh col B).
  *
  * One shared tab — NOT TEST_MODE-split (only the Registration write target flips).
+ *
+ * Read vs. write freshness:
+ *   - getRosterMap()      — CACHED read (Redis, ~10 min TTL). Gate + display.
+ *   - lookupRosterEntry() — always FRESH. Write paths needing a live rowIndex.
+ *   - registerRosterEntry — always FRESH read then write; evict cache after.
  */
+
+const { KEYS, TTL, cacheGet, cacheSet, cacheDel } = require('./cache');
 
 const ROSTER_TAB = 'Roster';
 
@@ -47,7 +54,83 @@ function findRosterEntry(rows, uuid) {
 }
 
 /**
+ * Build a `uuid -> { dataName, discordName, rowIndex }` map from raw rows.
+ *
+ * Pure/deterministic (safe to cache the result). Every row with a truthy UUID
+ * cell is indexed; a header row is harmless because its "Discord UUID" label is
+ * never looked up by a real snowflake.
+ *
+ * ⚠️ `rowIndex` is only valid until the tab is edited. It is fine for reads /
+ * the signup gate / display, but write paths must re-resolve the row from a
+ * FRESH read (see getRosterMap notes) — never trust a cached rowIndex to write.
+ *
+ * @param {Array<Array<string>>} rows - Raw `Roster!A:C` rows
+ * @returns {Object<string,{dataName:string,discordName:string,rowIndex:number}>}
+ */
+function buildRosterMap(rows) {
+    const map = {};
+    if (!rows) return map;
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row) continue;
+        const uuid = row[ROSTER_COL.UUID];
+        if (!uuid) continue;
+        map[uuid] = {
+            dataName: (row[ROSTER_COL.DATA_NAME] || '').trim(),
+            discordName: (row[ROSTER_COL.DISCORD_NAME] || '').trim(),
+            rowIndex: i + 1
+        };
+    }
+    return map;
+}
+
+/**
+ * Read-through cache for the whole roster as a `uuid -> {…}` map.
+ *
+ * Serves the `/signup` HARD GATE and Data Name display: tries Redis first, and
+ * on a miss reads `Roster!A:C`, builds the map, and populates the cache
+ * (fire-and-forget). The Sheets read still THROWS on API error so the gate
+ * fails CLOSED — the cache layer itself never throws (it degrades to null).
+ *
+ * Cache correctness relies on `/register` evicting `tdl:roster` (see
+ * invalidateRosterCache) so a just-registered player is never wrongly blocked.
+ *
+ * ⚠️ Read/gate/display only. Do NOT use the returned rowIndex to write — write
+ * paths (col-B refresh, /register upsert) read the sheet fresh on purpose.
+ *
+ * @returns {Promise<Object<string,{dataName:string,discordName:string,rowIndex:number}>>}
+ */
+async function getRosterMap({ sheets, auth, spreadsheetId }) {
+    const cached = await cacheGet(KEYS.ROSTER);
+    if (cached) return cached;
+
+    const res = await sheets.spreadsheets.values.get({
+        auth,
+        spreadsheetId,
+        range: `${ROSTER_TAB}!A:C`
+    });
+    const map = buildRosterMap(res.data.values || []);
+    // Fire-and-forget: never block the gate on a cache write (cacheSet is
+    // internally guarded and resolves without throwing).
+    cacheSet(KEYS.ROSTER, map, TTL.ROSTER_SEC);
+    return map;
+}
+
+/**
+ * Evict the cached roster map. Call fire-and-forget AFTER a successful
+ * `/register` write so the next `/signup` gate reads fresh and sees the change.
+ *
+ * @returns {Promise<boolean>} true if an eviction was issued.
+ */
+async function invalidateRosterCache() {
+    return cacheDel(KEYS.ROSTER);
+}
+
+/**
  * Read the Roster tab and resolve one user's entry by UUID.
+ *
+ * Always reads FRESH (bypasses cache) — used by write paths that need an
+ * accurate rowIndex (the col-B username refresh in /signup's modal handler).
  *
  * Throws on Sheets API errors so the caller can fail CLOSED (block the signup)
  * rather than silently bypass the gate.
@@ -150,6 +233,9 @@ module.exports = {
     ROSTER_TAB,
     ROSTER_COL,
     findRosterEntry,
+    buildRosterMap,
+    getRosterMap,
+    invalidateRosterCache,
     lookupRosterEntry,
     refreshDiscordName,
     registerRosterEntry

@@ -8,6 +8,7 @@
 const assert = require('assert');
 const {
     findRosterEntry,
+    buildRosterMap,
     lookupRosterEntry,
     refreshDiscordName,
     registerRosterEntry,
@@ -75,6 +76,27 @@ test('findRosterEntry trims Data Name / Discord Name', () => {
     const entry = findRosterEntry([['  Ally  ', '  alice ', 'U2']], 'U2');
     assert.strictEqual(entry.dataName, 'Ally');
     assert.strictEqual(entry.discordName, 'alice');
+});
+
+test('buildRosterMap indexes every UUID with a 1-based rowIndex', () => {
+    const rows = [HEADER, ['Toe', 'toeshank', 'U1'], ['Ally', 'alice', 'U2']];
+    const map = buildRosterMap(rows);
+    assert.deepStrictEqual(map['U1'], { dataName: 'Toe', discordName: 'toeshank', rowIndex: 2 });
+    assert.deepStrictEqual(map['U2'], { dataName: 'Ally', discordName: 'alice', rowIndex: 3 });
+});
+
+test('buildRosterMap skips null rows and rows with no UUID', () => {
+    const rows = [HEADER, null, ['NoId', 'ghost'], ['Toe', 'toeshank', 'U1']];
+    const map = buildRosterMap(rows);
+    assert.deepStrictEqual(Object.keys(map).sort(), ['Discord UUID', 'U1']); // header UUID cell is harmless
+    assert.strictEqual(map['U1'].rowIndex, 4);
+});
+
+test('buildRosterMap trims Data Name / Discord Name and handles empty input', () => {
+    assert.deepStrictEqual(buildRosterMap([]), {});
+    assert.deepStrictEqual(buildRosterMap(null), {});
+    const map = buildRosterMap([['  Ally  ', '  alice ', 'U2']]);
+    assert.deepStrictEqual(map['U2'], { dataName: 'Ally', discordName: 'alice', rowIndex: 1 });
 });
 
 test('lookupRosterEntry reads Roster!A:C and resolves the entry', async () => {

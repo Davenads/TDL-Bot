@@ -1,8 +1,9 @@
 # TDL-Bot — Project Overview (Planning)
 
 > **Status:** Scaffold built. `/signup` and `/register` implemented + unit-tested
-> (not yet Discord-tested or deployed). This folder is the source of truth for
-> design decisions.
+> (not yet Discord-tested or deployed). Redis caching **Phase A** (roster
+> read-through + evict on `/register`) is built. This folder is the source of
+> truth for design decisions.
 
 ## What is TDL-Bot?
 
@@ -100,9 +101,12 @@ previously deferred — it now exists as a real tab.
 - On a matched signup the bot resolves the player's **Data Name** (used in the public
   confirmation) and can **opportunistically refresh** col B (Discord Name) when the
   stored username is stale — keeping the roster current for free (bot has write access).
-- The bot never **invents** a Data Name. Roster rows are created out-of-band today
-  (admin edits the sheet) and, in future, via a **`/register`** command. See
+- The bot never **invents** a Data Name. Roster rows are created via the **`/register`**
+  command (self-serve or admin) or by an admin editing the sheet directly. See
   `02-sheets-integration.md` for mechanics and `03-decisions.md` for the decisions.
+- **Caching:** the gate read is served from a Redis read-through cache
+  (`tdl:roster`, 10-min TTL) that `/register` evicts; with Redis down it falls back
+  to a live Sheets read. See `07-redis-caching.md`.
 
 ## Categories
 
@@ -135,8 +139,8 @@ Same dual-mode pattern as DFC-Data:
 
 ## Deferred / Future scope (not now)
 
-- **Redis caching** — cache the roster (and later recent-signups / standings) to
-  cut Sheets reads on the `/signup` hot path. **Planning:** `07-redis-caching.md`.
+- **Redis caching (Phases B–C)** — Phase A (roster cache) is **built**; next is
+  caching recent-signups then standings/ELO. See `07-redis-caching.md`.
 - `/standings`, `/elo`, `/results`, `/builds` read commands (report-style, like DFC)
 - Result reporting command (writes to `Results`)
 - Signup-window open/close announcements via cron

@@ -11,7 +11,7 @@ data a Google Form cannot reliably capture.
 
 - Node.js 20.x + discord.js v14 (slash commands, buttons, modals)
 - Google Sheets API (googleapis) — persistence
-- Redis (optional) — phase-2 read caching
+- Redis (optional) — read caching (roster map is cached; see `plan/07`)
 - Heroku (GitHub auto-deploy)
 
 ## Project structure
@@ -25,8 +25,9 @@ commands/
 utils/
   googleAuth.js       Service-account JWT auth
   redisClient.js      Optional Redis connection
+  cache.js            Guarded cache helpers over Redis (graceful no-op fallback)
   tdlWeekUtils.js     Registration-window gate, week math, timestamp formatting
-  rosterUtils.js      Roster read/lookup, username refresh, register upsert
+  rosterUtils.js      Roster read/lookup + cache, username refresh, register upsert
 plan/                 Design docs (source of truth for decisions)
 ```
 
@@ -45,7 +46,9 @@ Behavior:
 - **Roster gate:** checks the `Roster` tab (`Data Name | Discord Name | Discord UUID`)
   by UUID up front — users not on the roster are blocked. On a match it resolves the
   Data Name (shown in the confirmation) and refreshes the stored Discord username if
-  it drifted. Use `/register` to get on the roster.
+  it drifted. Use `/register` to get on the roster. The gate read is served from a
+  Redis cache (`tdl:roster`, 10-min TTL) that `/register` evicts, so a just-registered
+  player can sign up immediately; with Redis down it falls back to a live Sheets read.
 - Registration window: opens Tuesday 12:00 AM ET, closes Sunday 11:59 PM ET (all day
   Monday is closed so matchups can be built before the event).
 

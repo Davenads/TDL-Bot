@@ -3,7 +3,7 @@ const {
     EmbedBuilder,
     PermissionFlagsBits
 } = require('discord.js');
-const { registerRosterEntry } = require('../utils/rosterUtils');
+const { registerRosterEntry, invalidateRosterCache } = require('../utils/rosterUtils');
 
 // ---- Config ----
 const SPREADSHEET_ID = process.env.TDL_SPREADSHEET_ID || '1gz1sIYGUf-vxMCmsl7b7icFfI9HlAYSbs1rOFRCz1Ww';
@@ -118,6 +118,14 @@ module.exports = {
                 });
                 return;
             }
+
+            // Evict the cached roster map so the next /signup gate reads fresh
+            // and immediately sees this new/updated member. Fire-and-forget:
+            // never fail the registration on a cache hiccup (worst case the
+            // change self-heals within the ~10 min TTL).
+            invalidateRosterCache().catch(err =>
+                console.error(`[${timestamp}] Roster cache evict failed for ${uuid} (non-fatal):`, err.message)
+            );
 
             const forOther = target.id !== interaction.user.id;
             const verb = result.action === 'updated' ? 'updated on' : 'added to';

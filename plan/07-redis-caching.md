@@ -1,8 +1,15 @@
-# 07 — Redis Caching Strategy (Planning)
+# 07 — Redis Caching Strategy
 
-> **Status:** Planning only. Redis is wired as an **optional** connection
-> (`utils/redisClient.js`) but nothing caches through it yet. This doc defines
-> *what* to cache, *how*, and *when to invalidate* so we can add it deliberately.
+> **Status:** **Phase A BUILT** (roster read-through cache + evict-on-`/register`).
+> Phases B–C still planned. Redis remains an **optional** connection
+> (`utils/redisClient.js`); with it down, everything falls back to live Sheets
+> reads. This doc defines *what* to cache, *how*, and *when to invalidate*.
+>
+> **node-redis v5 note:** `package.json` pins `redis@^5.1.0`. v5 keeps the
+> object-form expiration on SET — `client.set(key, value, { EX: seconds })` —
+> and leaves `GET`/`DEL` unchanged (only teardown methods were renamed:
+> `disconnect()`→`destroy()`, `quit()`→`close()`), so the wiring below is v5-safe.
+> Source: [node-redis v4→v5 migration](https://github.com/redis/node-redis/blob/master/docs/v4-to-v5.md).
 
 ## Why
 
@@ -27,11 +34,11 @@ hot, rarely-changing data from memory and only fall back to Sheets on a miss.
 
 ## What to cache (priority order)
 
-| Priority | Data | Key | Value | TTL | Invalidate on |
-|---|---|---|---|---|---|
-| 1 | **Roster map** (whole tab) | `tdl:roster` | JSON: `{ uuid: { dataName, discordName, rowIndex } }` | ~10 min | `/register` write (evict or rewrite) |
-| 2 | Current-week signups | `tdl:signups:current` | JSON array of rows | ~1–3 h | `/signup` write (evict) |
-| 3 | Standings / ELO (future) | `tdl:standings`, `tdl:elo:*` | JSON | ~1–3 h | cron refresh around event |
+| Priority | Data | Key | Value | TTL | Invalidate on | Status |
+|---|---|---|---|---|---|---|
+| 1 | **Roster map** (whole tab) | `tdl:roster` | JSON: `{ uuid: { dataName, discordName, rowIndex } }` | 10 min | `/register` write (evict) | **Built** |
+| 2 | Current-week signups | `tdl:signups:current` | JSON array of rows | ~1–3 h | `/signup` write (evict) | Planned |
+| 3 | Standings / ELO (future) | `tdl:standings`, `tdl:elo:*` | JSON | ~1–3 h | cron refresh around event | Planned |
 
 > Namespacing: prefix everything `tdl:` (DFC uses `dfc-data:`) to avoid collisions
 > if the two bots ever share a Redis instance.
@@ -93,9 +100,20 @@ Put these in a small `utils/cache.js`; keep `redisClient.js` as the raw connecti
 
 ## Phasing
 
-1. **Phase A (first win):** `getRosterMap()` read-through cache + evict on
-   `/register`. Immediately cuts the `/signup` hot-path Sheets reads. Write paths
-   (col-B refresh, `/register` update) keep reading fresh to avoid stale `rowIndex`.
+1. **Phase A — BUILT.** `getRosterMap()` read-through cache (`utils/cache.js` +
+   `rosterUtils.buildRosterMap`/`getRosterMap`/`invalidateRosterCache`) wired into
+   the `/signup` gate, evicted on `/register`. Cuts the `/signup` hot-path Sheets
+   reads to zero on a cache hit. Write paths keep reading fresh:
+   - `getRosterMap()` (cached) → `/signup` gate + Data Name display only.
+   - `lookupRosterEntry()` (always fresh) → `/signup` modal's col-B refresh (needs
+     a live `rowIndex`).
+   - `registerRosterEntry()` (fresh read-then-write) → `/register`, which evicts
+     `tdl:roster` after a successful upsert.
+   - The col-B username refresh does **not** evict (non-structural, cosmetic
+     `discordName` drift); it self-heals within the 10-min TTL.
+   - Tests: `test/cache.test.js` (11 — helpers, read-through, eviction, Redis-down
+     fallback, fail-closed on Sheets error) + `buildRosterMap` cases in
+     `test/roster.test.js`.
 2. **Phase B:** current-week signups cache + `/recentsignups`.
 3. **Phase C:** standings/ELO caches with a `node-cron` refresh around the Monday
    event (`node-cron` is already a dependency).
