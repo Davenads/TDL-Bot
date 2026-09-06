@@ -6,11 +6,20 @@
 > (`utils/redisClient.js`); with it down, everything falls back to live Sheets
 > reads. This doc defines *what* to cache, *how*, and *when to invalidate*.
 >
-> **node-redis v5 note:** `package.json` pins `redis@^5.1.0`. v5 keeps the
-> object-form expiration on SET — `client.set(key, value, { EX: seconds })` —
-> and leaves `GET`/`DEL` unchanged (only teardown methods were renamed:
-> `disconnect()`→`destroy()`, `quit()`→`close()`), so the wiring below is v5-safe.
-> Source: [node-redis v4→v5 migration](https://github.com/redis/node-redis/blob/master/docs/v4-to-v5.md).
+> **node-redis v5 note:** `package.json` pins `redis@^5.1.0` (installed `5.12.1`).
+> v5 keeps the object-form expiration on SET — `client.set(key, value, { EX: seconds })`
+> — and leaves `GET`/`DEL` unchanged. On teardown, `close()`/`destroy()` are the v5
+> names (`quit()`/`disconnect()` still exist as deprecated aliases); `redisClient.close()`
+> uses the graceful `close()`. Source:
+> [node-redis v4→v5 migration](https://github.com/redis/node-redis/blob/master/docs/v4-to-v5.md).
+>
+> **Heroku connection posture:** `utils/redisClient.js` resolves the URL from the
+> first of `REDIS_URL` (Heroku Data for Redis), `REDISCLOUD_URL` (Redis Cloud), or
+> `REDIS_TLS_URL` — whichever add-on is provisioned. A `rediss://` URL is wired with
+> `socket.tls` + `rejectUnauthorized: false` because Heroku Redis presents a
+> self-signed cert. Reconnect is bounded-backoff and self-healing; `index.js` closes
+> the client on `SIGTERM`/`SIGINT`. See `plan/05` for provisioning. Absent all vars,
+> the bot logs and runs cache-less.
 
 ## Why
 

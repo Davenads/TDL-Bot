@@ -158,6 +158,19 @@ client.on('messageCreate', async (message) => {
 
 client.login(process.env.BOT_TOKEN);
 
+// ---- Graceful shutdown (Heroku sends SIGTERM when cycling the dyno) ----
+let shuttingDown = false;
+async function shutdown(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} received — shutting down.`);
+    try { await redisClient.close(); } catch (err) { /* ignore teardown errors */ }
+    try { await client.destroy(); } catch (err) { /* ignore teardown errors */ }
+    process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
 // ---- Heroku port binding (web dyno) ----
 if (process.env.PORT || process.env.NODE_ENV === 'production') {
     const PORT = process.env.PORT || 3000;

@@ -25,7 +25,7 @@ commands/
   recentsignups.js    /recentsignups — this week's signups by division (cached read)
 utils/
   googleAuth.js       Service-account JWT auth
-  redisClient.js      Optional Redis connection
+  redisClient.js      Optional Redis connection (Heroku add-on URL resolution + TLS)
   cache.js            Guarded cache helpers over Redis (graceful no-op fallback)
   tdlWeekUtils.js     Registration-window gate, week math, timestamp formatting
   rosterUtils.js      Roster read/lookup + cache, username refresh, register upsert
@@ -113,7 +113,7 @@ Ephemeral list of who has signed up for this week's event.
 | `DUELER_ROLE_NAME` | Role name required for `/signup` (default `Dueler`) |
 | `TDL_ADMIN_ROLE_NAME` | Optional role name allowed to register others via `/register`; Manage-Server members can too |
 | `SIGNUP_CHANNEL_ID` | Optional channel for public confirmations; defaults to invoking channel |
-| `REDISCLOUD_URL` | Optional Redis URL (caches roster map + current-week signups) |
+| `REDIS_URL` / `REDISCLOUD_URL` | Optional Redis URL (caches roster map + current-week signups). Set automatically by the Heroku Redis add-on — `REDIS_URL` for Heroku Data for Redis, `REDISCLOUD_URL` for Redis Cloud. `rediss://` (TLS) is auto-handled. |
 
 ## Deployment
 

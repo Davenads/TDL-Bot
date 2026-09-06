@@ -63,7 +63,7 @@ Set every key from `.env.example` as a Heroku config var. Do **not** commit
 | `TEST_MODE` | `true` -> Registration Test tab; `false` -> Registration tab |
 | `DUELER_ROLE_NAME` | Defaults to `Dueler` if unset |
 | `SIGNUP_CHANNEL_ID` | Optional public-confirmation channel |
-| `REDISCLOUD_URL` | Optional; set automatically if the Redis Cloud add-on is provisioned |
+| `REDIS_URL` / `REDISCLOUD_URL` | Optional; **set automatically by the Redis add-on** (Heroku Data for Redis sets `REDIS_URL`, Redis Cloud sets `REDISCLOUD_URL`). Do not set by hand. |
 | `NODE_ENV` | Set to `production` (also forces the HTTP server on) |
 
 ### GOOGLE_PRIVATE_KEY caveat
@@ -79,13 +79,53 @@ forms technically work, but the convention is:
 If auth fails on Heroku with a 400/parse error, the private key formatting is the
 first thing to check.
 
-## Redis (optional, phase 2)
+## Redis (optional cache — live for `/signup` gate and `/recentsignups`)
 
-- Provision the **Redis Cloud** add-on to get `REDISCLOUD_URL` set automatically.
-- The bot runs fine without it — `redisClient.connect()` failures are caught in
-  `ready` and logged; commands fall back to live Sheets reads.
-- Not required for `/signup` (write path). Only relevant once read/caching
-  commands are added.
+The bot caches the roster map (10-min TTL) and the current-week signups (2-h TTL).
+It runs fine **without** Redis — `redisClient.connect()` failures are caught at
+startup and logged, `isReady()` returns false, and every cached read falls back to a
+live Sheets read. Redis is never the source of truth.
+
+### Add-on choice (either works)
+
+`utils/redisClient.js` resolves the connection URL from the first env var that is set,
+in priority order — so **whichever add-on you provision, it just works**:
+
+1. `REDIS_URL` — **Heroku Data for Redis** (Heroku's first-party add-on).
+2. `REDISCLOUD_URL` — **Redis Cloud** add-on (Redis Ltd; generous free tier).
+3. `REDIS_TLS_URL` — explicit TLS endpoint some plans also expose.
+
+The add-on sets its var automatically on provision; don't set it by hand.
+
+### TLS caveat (important for Heroku Data for Redis)
+
+Heroku Data for Redis serves TLS (`rediss://`) with a **self-signed certificate**, so
+a default connection fails CA verification. When the resolved URL starts with
+`rediss://`, the client sets `socket.tls` with `rejectUnauthorized: false` — traffic
+stays encrypted, we just skip CA-chain validation (the documented Heroku approach).
+Non-TLS `redis://` URLs (typical Redis Cloud free tier) connect as-is. No manual
+config is needed either way.
+
+### Provisioning (CLI)
+
+```bash
+# Option A — Heroku Data for Redis (sets REDIS_URL):
+heroku addons:create heroku-redis:mini -a <app>
+
+# Option B — Redis Cloud (sets REDISCLOUD_URL):
+heroku addons:create rediscloud:30 -a <app>
+```
+
+Or add either from the dashboard **Resources** tab. Nothing else to configure —
+redeploy/restart isn't required beyond the automatic config-var change (which
+triggers a restart on its own).
+
+### Resilience & shutdown
+
+- **Reconnect:** a transient Redis outage self-heals — the client retries with capped
+  backoff and `isReady()` gates reads to Sheets until it's back.
+- **Graceful shutdown:** `index.js` traps `SIGTERM`/`SIGINT` (Heroku sends `SIGTERM`
+  when cycling the dyno) and closes the Redis and Discord connections before exit.
 
 ## First-time setup checklist
 
@@ -93,7 +133,8 @@ first thing to check.
 2. Settings → **Deploy** → connect to the `Davenads/TDL-Bot` GitHub repo.
 3. Enable **Automatic deploys** from `main`.
 4. Settings → **Config Vars** → add every key from the table above.
-5. (Optional) Add the Redis Cloud add-on.
+5. (Optional) Add a Redis add-on — `heroku-redis:mini` **or** `rediscloud:30` (see
+   the Redis section). The connection URL is set automatically.
 6. Ensure exactly **one** web dyno is scaled on (`heroku ps:scale web=1` or via
    the Resources tab). Never scale above 1 — duplicate bots double-post.
 7. Register slash commands once (locally or via a one-off dyno):
