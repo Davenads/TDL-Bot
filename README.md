@@ -136,3 +136,4 @@ See `plan/` for the full design and decision records:
 - `05-heroku-hosting.md`
 - `06-google-cloud-setup.md`
 - `07-redis-caching.md`
+- `08-setup-runbook.md` — the end-to-end operator setup/deploy checklist
