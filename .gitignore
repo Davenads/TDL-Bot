@@ -8,3 +8,6 @@ config/credentials.json
 
 .vscode/
 debug-ss/
+
+# Local run log (from `npm start > bot.log`)
+bot.log
