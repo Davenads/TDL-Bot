@@ -78,14 +78,17 @@ function getEventDateString() {
  * Filter sheet rows to only those in the current registration week.
  * @param {Array<Array<string>>} rows - Rows from the Registration tab
  * @param {boolean} skipHeader - Skip the first (header) row. Default true.
+ * @param {number} tsIndex - Column index holding the timestamp. Default 0.
+ *   The Discord Registration tab keeps Status in column A, so its timestamp is
+ *   in column B (index 1); callers pass COL.TIMESTAMP for that layout.
  * @returns {Array<Array<string>>}
  */
-function filterCurrentWeekSignups(rows, skipHeader = true) {
+function filterCurrentWeekSignups(rows, skipHeader = true, tsIndex = 0) {
     const weekStart = getWeekStartDate();
     const startIndex = skipHeader ? 1 : 0;
     return (rows || []).slice(startIndex).filter(row => {
-        if (!row || !row[0]) return false;
-        const d = new Date(row[0]);
+        if (!row || !row[tsIndex]) return false;
+        const d = new Date(row[tsIndex]);
         return !isNaN(d.getTime()) && d >= weekStart;
     });
 }

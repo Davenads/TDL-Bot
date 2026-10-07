@@ -22,6 +22,7 @@ const {
 const {
     REG_TAB,
     COL,
+    quoteSheet,
     invalidateSignupsCache
 } = require('../utils/signupUtils');
 
@@ -117,7 +118,7 @@ async function upsertSignups({ sheets, auth, uuid, username, notes, divisions })
     const res = await sheets.spreadsheets.values.get({
         auth,
         spreadsheetId: SPREADSHEET_ID,
-        range: `${REG_TAB}!A:E`
+        range: `${quoteSheet(REG_TAB)}!A:F`
     });
 
     const rows = res.data.values || [];
@@ -140,13 +141,16 @@ async function upsertSignups({ sheets, auth, uuid, username, notes, divisions })
             }
         }
 
+        // Write payload targets columns B:F only — column A (Status) is a manual
+        // admin dropdown the bot must never touch. Order matches B..F:
+        // [timestamp, uuid, username, notes, category].
         const values = [[timestamp, uuid, username, notes, category]];
 
         if (matchRow > 0) {
             await sheets.spreadsheets.values.update({
                 auth,
                 spreadsheetId: SPREADSHEET_ID,
-                range: `${REG_TAB}!A${matchRow}:E${matchRow}`,
+                range: `${quoteSheet(REG_TAB)}!B${matchRow}:F${matchRow}`,
                 valueInputOption: 'RAW',
                 requestBody: { values }
             });
@@ -155,12 +159,14 @@ async function upsertSignups({ sheets, auth, uuid, username, notes, divisions })
             await sheets.spreadsheets.values.update({
                 auth,
                 spreadsheetId: SPREADSHEET_ID,
-                range: `${REG_TAB}!A${nextRow}:E${nextRow}`,
+                range: `${quoteSheet(REG_TAB)}!B${nextRow}:F${nextRow}`,
                 valueInputOption: 'RAW',
                 requestBody: { values }
             });
-            // Reflect locally so a second division in the same call increments correctly.
-            rows[nextRow - 1] = values[0];
+            // Reflect locally so a second division in the same call increments
+            // correctly. Prepend an empty Status so the fabricated row stays
+            // aligned to the A:F layout the dedupe scan indexes with COL.*.
+            rows[nextRow - 1] = ['', ...values[0]];
             nextRow++;
             results.push({ category, action: 'created' });
         }

@@ -10,21 +10,30 @@ process.env.TEST_MODE = 'true'; // MUST be set before requiring signup.js (REG_T
 const assert = require('assert');
 const { formatSheetTimestamp } = require('../utils/tdlWeekUtils');
 const { _internals } = require('../commands/signup');
+const { quoteSheet } = require('../utils/signupUtils');
 const { upsertSignups, REG_TAB, COL, CATEGORY_DIVISIONS } = _internals;
 
 // Fail loudly if the env-before-require ordering ever breaks (would otherwise
 // silently switch REG_TAB to the prod tab and stop testing test-mode behavior).
-assert.strictEqual(REG_TAB, 'Registration Test', 'TEST_MODE must resolve REG_TAB to the test tab');
+assert.strictEqual(REG_TAB, 'Discord Registration Test', 'TEST_MODE must resolve REG_TAB to the test tab');
+
+// COL indexes the full A:F row read back from the sheet (Status in column A).
+// The WRITE payload only spans B:F (the bot never touches Status), so its own
+// element offsets are one less than COL's — captured separately as WCOL.
+const WCOL = { TIMESTAMP: 0, UUID: 1, USERNAME: 2, NOTES: 3, CATEGORY: 4 };
 
 // Row-0 filler. Only its presence matters (upsertSignups skips the header); the
 // label strings are never asserted against.
-const HEADER = ['Timestamp', 'Discord UUID', 'Discord Username', 'Notes', 'Category'];
+const HEADER = ['Status', 'Timestamp', 'Discord UUID', 'Discord Username', 'Notes', 'Category'];
 const NOW = formatSheetTimestamp();       // current-week timestamp (ET, sheet format)
 const STALE = '1/1/2020 12:00:00';         // well before any current week (year gap => TZ-safe)
 const AUTH = { fake: true };
 
 function rng(row) {
-    return `${REG_TAB}!A${row}:E${row}`;
+    // Sheet names with spaces (e.g. "Discord Registration Test") must be single-
+    // quoted in A1 notation, so the expected range mirrors quoteSheet(REG_TAB).
+    // Writes span B:F only — column A (Status) is left untouched.
+    return `${quoteSheet(REG_TAB)}!B${row}:F${row}`;
 }
 
 // Fake googleapis `sheets` object. `get` returns a DEEP COPY of the seeded rows
@@ -70,19 +79,19 @@ test('Both -> two created rows at the next two rows', async () => {
 });
 
 test('Re-run same (UUID+Category) this week -> updated in place, no new row', async () => {
-    const existing = [NOW, 'U1', 'alice', 'old note', 'HLD'];
+    const existing = ['', NOW, 'U1', 'alice', 'old note', 'HLD'];
     const { api, updates } = makeSheets([HEADER.slice(), existing]);
     const results = await upsertSignups({
         sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: 'new note', divisions: CATEGORY_DIVISIONS.HLD
     });
     assert.strictEqual(updates.length, 1, 'one write');
     assert.strictEqual(updates[0].range, rng(2), 'targets the existing row');
-    assert.strictEqual(updates[0].values[COL.NOTES], 'new note', 'notes refreshed');
+    assert.strictEqual(updates[0].values[WCOL.NOTES], 'new note', 'notes refreshed');
     assert.deepStrictEqual(results, [{ category: 'HLD', action: 'updated' }]);
 });
 
 test('Stale (last-week) row is ignored -> creates a new row', async () => {
-    const stale = [STALE, 'U1', 'alice', '', 'HLD'];
+    const stale = ['', STALE, 'U1', 'alice', '', 'HLD'];
     const { api, updates } = makeSheets([HEADER.slice(), stale]);
     const results = await upsertSignups({
         sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: '', divisions: CATEGORY_DIVISIONS.HLD
@@ -93,19 +102,19 @@ test('Stale (last-week) row is ignored -> creates a new row', async () => {
 });
 
 test('Different UUID, same category -> separate row', async () => {
-    const other = [NOW, 'U1', 'alice', '', 'HLD'];
+    const other = ['', NOW, 'U1', 'alice', '', 'HLD'];
     const { api, updates } = makeSheets([HEADER.slice(), other]);
     const results = await upsertSignups({
         sheets: api, auth: AUTH, uuid: 'U2', username: 'bob', notes: '', divisions: CATEGORY_DIVISIONS.HLD
     });
     assert.strictEqual(updates.length, 1);
     assert.strictEqual(updates[0].range, rng(3));
-    assert.strictEqual(updates[0].values[COL.UUID], 'U2');
+    assert.strictEqual(updates[0].values[WCOL.UUID], 'U2');
     assert.deepStrictEqual(results, [{ category: 'HLD', action: 'created' }]);
 });
 
 test('Both with one pre-existing division -> mixed created/updated', async () => {
-    const existingLLD = [NOW, 'U1', 'alice', 'prev', 'LLD'];
+    const existingLLD = ['', NOW, 'U1', 'alice', 'prev', 'LLD'];
     const { api, updates } = makeSheets([HEADER.slice(), existingLLD]);
     const results = await upsertSignups({
         sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: 'x', divisions: CATEGORY_DIVISIONS.Both
@@ -126,11 +135,11 @@ test('Written row shape = [timestamp, uuid, username, notes, category]', async (
     });
     const row = updates[0].values;
     assert.strictEqual(row.length, 5);
-    assert.match(row[COL.TIMESTAMP], /^\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2}$/, 'sheet timestamp format');
-    assert.strictEqual(row[COL.UUID], 'U9');
-    assert.strictEqual(row[COL.USERNAME], 'carol');
-    assert.strictEqual(row[COL.NOTES], 'gg');
-    assert.strictEqual(row[COL.CATEGORY], 'HLD');
+    assert.match(row[WCOL.TIMESTAMP], /^\d{1,2}\/\d{1,2}\/\d{4} \d{1,2}:\d{2}:\d{2}$/, 'sheet timestamp format');
+    assert.strictEqual(row[WCOL.UUID], 'U9');
+    assert.strictEqual(row[WCOL.USERNAME], 'carol');
+    assert.strictEqual(row[WCOL.NOTES], 'gg');
+    assert.strictEqual(row[WCOL.CATEGORY], 'HLD');
 });
 
 test('Both writes share one identical timestamp', async () => {
@@ -138,7 +147,7 @@ test('Both writes share one identical timestamp', async () => {
     await upsertSignups({
         sheets: api, auth: AUTH, uuid: 'U1', username: 'alice', notes: '', divisions: CATEGORY_DIVISIONS.Both
     });
-    assert.strictEqual(updates[0].values[COL.TIMESTAMP], updates[1].values[COL.TIMESTAMP], 'same timestamp on both rows');
+    assert.strictEqual(updates[0].values[WCOL.TIMESTAMP], updates[1].values[WCOL.TIMESTAMP], 'same timestamp on both rows');
 });
 
 test('Empty sheet (no header) -> first write lands at row 1', async () => {

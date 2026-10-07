@@ -21,12 +21,14 @@ const {
 } = require('../utils/signupUtils');
 
 // Guard the env-before-require ordering and the mode-namespaced key.
-assert.strictEqual(REG_TAB, 'Registration Test', 'TEST_MODE must resolve REG_TAB to the test tab');
+assert.strictEqual(REG_TAB, 'Discord Registration Test', 'TEST_MODE must resolve REG_TAB to the test tab');
 assert.ok(SIGNUPS_KEY.endsWith(':test'), 'signups cache key is mode-namespaced under TEST_MODE');
 
 const AUTH = { fake: true };
 const SHEET_ID = 'sheet-id';
-const HEADER = ['Timestamp', 'Discord UUID', 'Discord Username', 'Notes', 'Category'];
+// Full A:F row shape — column A (Status) is the manual admin dropdown the bot
+// never writes, so fixture rows lead with a '' Status placeholder.
+const HEADER = ['Status', 'Timestamp', 'Discord UUID', 'Discord Username', 'Notes', 'Category'];
 const NOW = formatSheetTimestamp();   // current-week timestamp (ET, sheet format)
 const STALE = '1/1/2020 12:00:00';    // year gap => reliably before this week (TZ-safe)
 
@@ -70,24 +72,24 @@ const tick = () => new Promise(r => setImmediate(r));
 
 // ---- Cases -----------------------------------------------------------------
 
-test('getCurrentWeekSignups reads REG_TAB!A:E and returns only current-week rows', async () => {
+test('getCurrentWeekSignups reads REG_TAB!A:F and returns only current-week rows', async () => {
     reset();
     const { api, stats } = makeSheets([
         HEADER,
-        [NOW, 'U1', 'alice', '', 'HLD'],
-        [STALE, 'U2', 'oldbob', '', 'LLD'],   // last week -> dropped
-        [NOW, 'U2', 'bob', 'gg', 'LLD']
+        ['', NOW, 'U1', 'alice', '', 'HLD'],
+        ['', STALE, 'U2', 'oldbob', '', 'LLD'],   // last week -> dropped
+        ['', NOW, 'U2', 'bob', 'gg', 'LLD']
     ]);
     const rows = await getCurrentWeekSignups({ sheets: api, auth: AUTH, spreadsheetId: SHEET_ID });
     assert.strictEqual(stats.get, 1, 'one Sheets read on a cold cache');
-    assert.strictEqual(stats.lastRange, 'Registration Test!A:E');
+    assert.strictEqual(stats.lastRange, `'Discord Registration Test'!A:F`);
     assert.strictEqual(rows.length, 2, 'stale row excluded, header excluded');
     assert.deepStrictEqual(rows.map(r => r[COL.UUID]).sort(), ['U1', 'U2']);
 });
 
 test('getCurrentWeekSignups serves the second call from cache (no second read)', async () => {
     reset();
-    const { api, stats } = makeSheets([HEADER, [NOW, 'U1', 'alice', '', 'HLD']]);
+    const { api, stats } = makeSheets([HEADER, ['', NOW, 'U1', 'alice', '', 'HLD']]);
     await getCurrentWeekSignups({ sheets: api, auth: AUTH, spreadsheetId: SHEET_ID });
     await tick(); // let the fire-and-forget cacheSet settle
     const rows2 = await getCurrentWeekSignups({ sheets: api, auth: AUTH, spreadsheetId: SHEET_ID });
@@ -97,7 +99,7 @@ test('getCurrentWeekSignups serves the second call from cache (no second read)',
 
 test('invalidateSignupsCache forces the next call to re-read (delete-on-write)', async () => {
     reset();
-    const { api, stats } = makeSheets([HEADER, [NOW, 'U1', 'alice', '', 'HLD']]);
+    const { api, stats } = makeSheets([HEADER, ['', NOW, 'U1', 'alice', '', 'HLD']]);
     await getCurrentWeekSignups({ sheets: api, auth: AUTH, spreadsheetId: SHEET_ID });
     await tick();
     await invalidateSignupsCache(); // e.g. after a /signup upsert
@@ -107,11 +109,11 @@ test('invalidateSignupsCache forces the next call to re-read (delete-on-write)',
 
 test('a cache entry from a different week is ignored (weekStart guard)', async () => {
     reset();
-    const { api, stats } = makeSheets([HEADER, [NOW, 'U1', 'alice', '', 'HLD']]);
+    const { api, stats } = makeSheets([HEADER, ['', NOW, 'U1', 'alice', '', 'HLD']]);
     // Seed a stale-week payload directly.
     await cacheSet(SIGNUPS_KEY, {
         weekStart: '1999-01-01T00:00:00.000Z',
-        rows: [[NOW, 'GHOST', 'ghost', '', 'HLD']]
+        rows: [['', NOW, 'GHOST', 'ghost', '', 'HLD']]
     }, 7200);
     const rows = await getCurrentWeekSignups({ sheets: api, auth: AUTH, spreadsheetId: SHEET_ID });
     assert.strictEqual(stats.get, 1, 'wrong-week cache ignored -> fresh read');
@@ -121,7 +123,7 @@ test('a cache entry from a different week is ignored (weekStart guard)', async (
 test('works uncached (every call reads Sheets) when Redis is down', async () => {
     reset();
     setReady(false);
-    const { api, stats } = makeSheets([HEADER, [NOW, 'U1', 'alice', '', 'HLD']]);
+    const { api, stats } = makeSheets([HEADER, ['', NOW, 'U1', 'alice', '', 'HLD']]);
     await getCurrentWeekSignups({ sheets: api, auth: AUTH, spreadsheetId: SHEET_ID });
     await getCurrentWeekSignups({ sheets: api, auth: AUTH, spreadsheetId: SHEET_ID });
     assert.strictEqual(stats.get, 2, 'no cache -> live read every time');
@@ -139,7 +141,7 @@ test('getCurrentWeekSignups propagates a Sheets error', async () => {
 test('a cache-read hiccup falls back to a live read (does not throw)', async () => {
     reset();
     throwOnGet = true; // cacheGet swallows and returns null
-    const { api, stats } = makeSheets([HEADER, [NOW, 'U1', 'alice', '', 'HLD']]);
+    const { api, stats } = makeSheets([HEADER, ['', NOW, 'U1', 'alice', '', 'HLD']]);
     const rows = await getCurrentWeekSignups({ sheets: api, auth: AUTH, spreadsheetId: SHEET_ID });
     assert.strictEqual(stats.get, 1, 'cache error -> live Sheets read');
     assert.strictEqual(rows[0][COL.UUID], 'U1');

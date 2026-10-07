@@ -18,12 +18,21 @@
 const { cacheGet, cacheSet, cacheDel } = require('./cache');
 const { getWeekStartDate, filterCurrentWeekSignups } = require('./tdlWeekUtils');
 
-// Reshaped Registration tab: A=Timestamp, B=Discord UUID, C=Discord Username, D=Notes, E=Category
-const REG_TAB = process.env.TEST_MODE === 'true' ? 'Registration Test' : 'Registration';
-const COL = { TIMESTAMP: 0, UUID: 1, USERNAME: 2, NOTES: 3, CATEGORY: 4 };
+// Discord Registration tab: A=Status, B=Timestamp, C=Discord UUID, D=Discord Username, E=Notes, F=Category.
+// Column A (Status) is a MANUAL Approved/Rejected/AFK dropdown owned by the league
+// admins — the bot never writes it (writes target B:F only). COL indexes the full
+// A:F row read back from the sheet, so STATUS occupies index 0.
+const REG_TAB = process.env.TEST_MODE === 'true' ? 'Discord Registration Test' : 'Discord Registration';
+const COL = { STATUS: 0, TIMESTAMP: 1, UUID: 2, USERNAME: 3, NOTES: 4, CATEGORY: 5 };
+
+// A1 notation requires the sheet name to be single-quoted whenever it contains a
+// space or other special char (e.g. the TEST_MODE tab "Discord Registration Test").
+// Quoting an already-safe name ("Registration") is harmless, so always quote.
+// Any literal single-quote in the name is escaped by doubling it, per the API.
+const quoteSheet = (name) => `'${String(name).replace(/'/g, "''")}'`;
 
 // Mode-namespaced so a shared Redis instance can't mix test/prod signups.
-const SIGNUPS_KEY = REG_TAB === 'Registration Test'
+const SIGNUPS_KEY = process.env.TEST_MODE === 'true'
     ? 'tdl:signups:current:test'
     : 'tdl:signups:current';
 // Every /signup evicts, so this TTL only bounds staleness from out-of-band
@@ -34,7 +43,7 @@ const SIGNUPS_TTL_SEC = 7200; // 2 hours
  * Current week's signup rows (raw `A:E` arrays, header + stale weeks removed).
  *
  * Read-through cache: returns the cached list when it was built for the same
- * registration week, otherwise reads `REG_TAB!A:E`, filters to the current week,
+ * registration week, otherwise reads `REG_TAB!A:F`, filters to the current week,
  * caches it (fire-and-forget), and returns it. Throws on a Sheets API error
  * (the caller is a display command, so it just reports "unavailable").
  *
@@ -53,9 +62,10 @@ async function getCurrentWeekSignups({ sheets, auth, spreadsheetId }) {
     const res = await sheets.spreadsheets.values.get({
         auth,
         spreadsheetId,
-        range: `${REG_TAB}!A:E`
+        range: `${quoteSheet(REG_TAB)}!A:F`
     });
-    const rows = filterCurrentWeekSignups(res.data.values || []);
+    // Timestamp lives in column B (COL.TIMESTAMP=1) now that Status occupies A.
+    const rows = filterCurrentWeekSignups(res.data.values || [], true, COL.TIMESTAMP);
     // Fire-and-forget (cacheSet is internally guarded and won't throw).
     cacheSet(SIGNUPS_KEY, { weekStart, rows }, SIGNUPS_TTL_SEC);
     return rows;
@@ -76,6 +86,7 @@ module.exports = {
     COL,
     SIGNUPS_KEY,
     SIGNUPS_TTL_SEC,
+    quoteSheet,
     getCurrentWeekSignups,
     invalidateSignupsCache
 };
