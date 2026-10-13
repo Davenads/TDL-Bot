@@ -81,6 +81,107 @@ async function invalidateSignupsCache() {
     return cacheDel(SIGNUPS_KEY);
 }
 
+// ---- Withdrawal (physical row deletion) -----------------------------------
+// These power `/withdraw`. Like the upsert write path, they always read the
+// sheet FRESH (never the cache): a delete target must reflect the live sheet, so
+// a stale cached row index could delete the wrong row.
+
+/**
+ * Current-week signup rows for one user, read FRESH from the sheet.
+ * One entry per matching row: `{ category, rowIndex }` (rowIndex is 1-based so
+ * it maps directly to a Sheets row / A1 reference).
+ *
+ * @returns {Promise<Array<{category:string, rowIndex:number}>>}
+ */
+async function getUserSignupRows({ sheets, auth, spreadsheetId, uuid }) {
+    const res = await sheets.spreadsheets.values.get({
+        auth,
+        spreadsheetId,
+        range: `${quoteSheet(REG_TAB)}!A:F`
+    });
+    const rows = res.data.values || [];
+    const weekStart = getWeekStartDate();
+    const matches = [];
+    for (let i = 1; i < rows.length; i++) { // skip header (row 0)
+        const row = rows[i];
+        if (!row || !row[COL.TIMESTAMP]) continue;
+        const d = new Date(row[COL.TIMESTAMP]);
+        if (isNaN(d.getTime()) || d < weekStart) continue;
+        if (row[COL.UUID] === uuid) {
+            matches.push({ category: row[COL.CATEGORY], rowIndex: i + 1 });
+        }
+    }
+    return matches;
+}
+
+/**
+ * Distinct current-week divisions a user is signed up for (drives the withdraw
+ * picker — we only offer buttons for divisions they're actually in).
+ *
+ * @returns {Promise<string[]>}
+ */
+async function getUserSignupDivisions({ sheets, auth, spreadsheetId, uuid }) {
+    const rows = await getUserSignupRows({ sheets, auth, spreadsheetId, uuid });
+    return [...new Set(rows.map(r => r.category).filter(Boolean))];
+}
+
+/**
+ * Resolve a tab's numeric sheetId (gid). `deleteDimension` targets a sheetId,
+ * not an A1 name, so row deletion needs this lookup first.
+ *
+ * @returns {Promise<number>}
+ */
+async function resolveSheetId({ sheets, auth, spreadsheetId, title = REG_TAB }) {
+    const meta = await sheets.spreadsheets.get({
+        auth,
+        spreadsheetId,
+        fields: 'sheets.properties(sheetId,title)'
+    });
+    const found = (meta.data.sheets || []).find(s => s.properties && s.properties.title === title);
+    if (!found) throw new Error(`Sheet tab not found: ${title}`);
+    return found.properties.sheetId;
+}
+
+/**
+ * Physically delete this user's current-week rows for the given categories.
+ *
+ * Reads FRESH, resolves the target rows, then deletes them via `deleteDimension`
+ * in a single batchUpdate ordered bottom-up (descending rowIndex) so that an
+ * earlier deletion never renumbers a row that a later request still references.
+ *
+ * @returns {Promise<{deleted:string[], count:number}>}
+ */
+async function deleteSignupRowsForUser({ sheets, auth, spreadsheetId, uuid, categories }) {
+    const wanted = new Set(categories || []);
+    const allRows = await getUserSignupRows({ sheets, auth, spreadsheetId, uuid });
+    const targets = allRows.filter(r => wanted.has(r.category));
+    if (targets.length === 0) return { deleted: [], count: 0 };
+
+    const sheetId = await resolveSheetId({ sheets, auth, spreadsheetId, title: REG_TAB });
+
+    // Descending rowIndex: deleting a higher row never shifts a lower one, so the
+    // remaining requests in the same batch still point at the correct rows.
+    const sorted = targets.slice().sort((a, b) => b.rowIndex - a.rowIndex);
+    const requests = sorted.map(t => ({
+        deleteDimension: {
+            range: {
+                sheetId,
+                dimension: 'ROWS',
+                startIndex: t.rowIndex - 1, // 0-based, inclusive
+                endIndex: t.rowIndex        // exclusive
+            }
+        }
+    }));
+
+    await sheets.spreadsheets.batchUpdate({
+        auth,
+        spreadsheetId,
+        requestBody: { requests }
+    });
+
+    return { deleted: targets.map(t => t.category), count: targets.length };
+}
+
 module.exports = {
     REG_TAB,
     COL,
@@ -88,5 +189,9 @@ module.exports = {
     SIGNUPS_TTL_SEC,
     quoteSheet,
     getCurrentWeekSignups,
-    invalidateSignupsCache
+    invalidateSignupsCache,
+    getUserSignupRows,
+    getUserSignupDivisions,
+    resolveSheetId,
+    deleteSignupRowsForUser
 };

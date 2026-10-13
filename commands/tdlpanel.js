@@ -48,7 +48,8 @@ function rosterUnavailableEmbed() {
 
 function panelButtons() {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('tdlsignup_panel').setLabel('Sign Up').setStyle(ButtonStyle.Success)
+        new ButtonBuilder().setCustomId('tdlsignup_panel').setLabel('Sign Up').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('tdlwithdraw_panel').setLabel('Withdraw').setStyle(ButtonStyle.Danger)
     );
 }
 
