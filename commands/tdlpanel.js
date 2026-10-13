@@ -3,8 +3,7 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    EmbedBuilder,
-    PermissionFlagsBits
+    EmbedBuilder
 } = require('discord.js');
 const { getEventDateString } = require('../utils/tdlWeekUtils');
 const { invalidateSignupsCache } = require('../utils/signupUtils');
@@ -13,10 +12,23 @@ const { getPanelBinding, setPanelBinding, clearPanelBinding } = require('../util
 
 // ---- Config ----
 const SPREADSHEET_ID = process.env.TDL_SPREADSHEET_ID || '1gz1sIYGUf-vxMCmsl7b7icFfI9HlAYSbs1rOFRCz1Ww';
-// Only members with this role may post/rebind the panel (see index.js roleId gate).
+// Who may post/rebind the panel: either the panel-admin role ID OR any role named
+// "Moderator" (matched by name). Enforced in `execute` rather than via the index.js
+// generic gate, which is single-role / AND-only and can't express this OR.
 const PANEL_ADMIN_ROLE_ID = '1538611745558626315';
+const PANEL_ADMIN_ROLE_NAME = 'Moderator';
 // Live-roster refresh cadence (ms). Catches manual sheet edits + week rollover.
 const PANEL_REFRESH_MS = 120000;
+
+/**
+ * May this member manage the panel? True if they hold the panel-admin role ID
+ * OR any role literally named "Moderator". Safe on a missing member/roles cache.
+ */
+function memberCanManagePanel(member) {
+    const roles = member && member.roles && member.roles.cache;
+    if (!roles) return false;
+    return roles.has(PANEL_ADMIN_ROLE_ID) || roles.some(r => r.name === PANEL_ADMIN_ROLE_NAME);
+}
 
 const BRAND_COLOR = 0x2b6cb0;
 const WARN_COLOR = 0xe53e3e;
@@ -121,21 +133,29 @@ function startPanelRefreshTimer(client, sheets, auth) {
 }
 
 module.exports = {
-    // index.js enforces this via the generic roleId gate.
-    roleId: PANEL_ADMIN_ROLE_ID,
+    // Exposed for unit testing the OR permission gate.
+    memberCanManagePanel,
     refreshSignupPanel,
     startPanelRefreshTimer,
 
     data: new SlashCommandBuilder()
         .setName('tdlpanel')
-        .setDescription('Post or rebind the persistent TDL signup panel in this channel')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        .setDescription('Post or rebind the persistent TDL signup panel in this channel'),
 
     async execute(interaction, sheets, auth) {
         const timestamp = new Date().toISOString();
 
         if (!interaction.guild || !interaction.channel) {
             await interaction.reply({ content: 'Run `/tdlpanel` in a server channel.', ephemeral: true });
+            return;
+        }
+
+        // OR gate: panel-admin role ID OR a role named "Moderator".
+        if (!memberCanManagePanel(interaction.member)) {
+            await interaction.reply({
+                content: 'You need the **Moderator** role (or the panel-admin role) to use `/tdlpanel`.',
+                ephemeral: true
+            });
             return;
         }
 
