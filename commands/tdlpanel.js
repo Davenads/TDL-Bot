@@ -3,7 +3,9 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    EmbedBuilder
+    EmbedBuilder,
+    ChannelType,
+    PermissionFlagsBits
 } = require('discord.js');
 const { getEventDateString } = require('../utils/tdlWeekUtils');
 const { invalidateSignupsCache } = require('../utils/signupUtils');
@@ -140,7 +142,13 @@ module.exports = {
 
     data: new SlashCommandBuilder()
         .setName('tdlpanel')
-        .setDescription('Post or rebind the persistent TDL signup panel in this channel'),
+        .setDescription('Post or rebind the persistent TDL signup panel')
+        .addChannelOption(o =>
+            o.setName('channel')
+                .setDescription('Channel to post the panel in (defaults to this channel)')
+                .addChannelTypes(ChannelType.GuildText)
+                .setRequired(false)
+        ),
 
     async execute(interaction, sheets, auth) {
         const timestamp = new Date().toISOString();
@@ -159,13 +167,32 @@ module.exports = {
             return;
         }
 
+        // Destination defaults to the invoking channel. An explicit `channel`
+        // option lets admins target a channel they can't invoke commands in —
+        // "Use Application Commands" gates the invoker here, while the post is
+        // governed by the BOT's Send Messages perm in the target.
+        const target = interaction.options.getChannel('channel') || interaction.channel;
+
+        // Preflight the bot's own perms in the target so we fail with a clear
+        // message instead of an opaque 403 at send time.
+        const me = interaction.guild.members.me;
+        const perms = me ? target.permissionsFor(me) : null;
+        if (!perms || !perms.has(PermissionFlagsBits.ViewChannel) || !perms.has(PermissionFlagsBits.SendMessages)) {
+            await interaction.reply({
+                content: `I need **View Channel** and **Send Messages** in <#${target.id}> to post the panel there.`,
+                ephemeral: true
+            });
+            return;
+        }
+
         await interaction.deferReply({ ephemeral: true });
 
+        const here = target.id === interaction.channelId;
         const existing = await getPanelBinding();
         const payload = await buildPanelPayload(sheets, auth);
 
-        // Rebind in place if a panel already lives in THIS channel.
-        if (existing && existing.channelId === interaction.channelId) {
+        // Rebind in place if a panel already lives in the TARGET channel.
+        if (existing && existing.channelId === target.id) {
             try {
                 const ch = await interaction.client.channels.fetch(existing.channelId);
                 const msg = await ch.messages.fetch(existing.messageId);
@@ -173,16 +200,16 @@ module.exports = {
                 await setPanelBinding({ channelId: ch.id, messageId: msg.id });
                 startPanelRefreshTimer(interaction.client, sheets, auth);
                 console.log(`[${timestamp}] tdlpanel refreshed existing panel in ${ch.id} by ${interaction.user.tag}`);
-                await interaction.editReply('Signup panel refreshed in this channel.');
+                await interaction.editReply(`Signup panel refreshed in <#${ch.id}>.`);
                 return;
             } catch {
                 // fall through to post a fresh one
             }
         }
 
-        // Post a new panel and bind to it.
-        const sent = await interaction.channel.send(payload);
-        await setPanelBinding({ channelId: interaction.channelId, messageId: sent.id });
+        // Post a new panel in the target channel and bind to it.
+        const sent = await target.send(payload);
+        await setPanelBinding({ channelId: target.id, messageId: sent.id });
         startPanelRefreshTimer(interaction.client, sheets, auth);
 
         // Best-effort: remove a stale panel left in another channel.
@@ -194,7 +221,10 @@ module.exports = {
             } catch { /* old panel already gone */ }
         }
 
-        console.log(`[${timestamp}] tdlpanel posted in ${interaction.channelId} by ${interaction.user.tag}`);
-        await interaction.editReply('Signup panel posted and bound to this channel.');
+        console.log(`[${timestamp}] tdlpanel posted in ${target.id} by ${interaction.user.tag}`);
+        await interaction.editReply(
+            here ? 'Signup panel posted and bound to this channel.'
+                 : `Signup panel posted in <#${target.id}>.`
+        );
     }
 };
