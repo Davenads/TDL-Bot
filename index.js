@@ -55,6 +55,18 @@ client.once('ready', async () => {
     } catch (error) {
         console.warn('Redis unavailable — continuing without cache:', error.message);
     }
+
+    // Re-sync any bound signup panel on boot and start its live-roster refresh.
+    // Non-fatal: a missing/absent panel must never block startup.
+    try {
+        const tdlpanel = require('./commands/tdlpanel');
+        await tdlpanel.refreshSignupPanel(client, sheets, auth).catch(err =>
+            console.warn('[panel] boot refresh failed (non-fatal):', err.message)
+        );
+        tdlpanel.startPanelRefreshTimer(client, sheets, auth);
+    } catch (error) {
+        console.warn('[panel] boot init failed (non-fatal):', error.message);
+    }
 });
 
 // ---- Interaction handling ----
@@ -67,6 +79,14 @@ client.on('interactionCreate', async (interaction) => {
         if (command.role && !interaction.member?.roles?.cache?.some(r => r.name === command.role)) {
             return interaction.reply({
                 content: `You do not have the required ${command.role} role to use this command.`,
+                ephemeral: true
+            });
+        }
+
+        // Generic role-ID gating hook (commands may set `roleId` to a required role id).
+        if (command.roleId && !interaction.member?.roles?.cache?.has(command.roleId)) {
+            return interaction.reply({
+                content: 'You do not have the required role to use this command.',
                 ephemeral: true
             });
         }

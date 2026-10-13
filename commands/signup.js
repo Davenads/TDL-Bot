@@ -175,6 +175,81 @@ async function upsertSignups({ sheets, auth, uuid, username, notes, divisions })
     return results;
 }
 
+/**
+ * Entry flow for a signup, shared by the `/signup` slash command and the
+ * persistent panel's "Sign Up" button. Runs the gates (guild → window →
+ * @Dueler → roster) and, on success, shows the ephemeral division picker.
+ * Replies ephemerally for both interaction types.
+ */
+async function startSignup(interaction, sheets, auth) {
+    const timestamp = new Date().toISOString();
+    const user = interaction.user;
+
+    // Guild-only (public confirmation + role check both require guild context).
+    if (!interaction.guild || !interaction.member) {
+        await interaction.reply({
+            content: 'Please run `/signup` in the TDL server, not in DMs.',
+            ephemeral: true
+        });
+        return;
+    }
+
+    // Chrono gate.
+    if (!isRegistrationOpen()) {
+        console.log(`[${timestamp}] Signup blocked (window closed) for ${user.tag} (${user.id})`);
+        await interaction.reply({ embeds: [windowClosedEmbed()], ephemeral: true });
+        return;
+    }
+
+    // Role gate.
+    if (!hasDuelerRole(interaction)) {
+        console.log(`[${timestamp}] Signup blocked (no ${DUELER_ROLE} role) for ${user.tag} (${user.id})`);
+        await interaction.reply({ embeds: [noRoleEmbed()], ephemeral: true });
+        return;
+    }
+
+    // Roster gate — the user must exist in the Roster tab (by UUID) to sign up.
+    // Uses the cached roster map (read-through Redis; /register evicts it).
+    // Fail CLOSED on a lookup error so a Sheets hiccup can't bypass the gate.
+    let rosterEntry;
+    try {
+        const rosterMap = await getRosterMap({ sheets, auth, spreadsheetId: SPREADSHEET_ID });
+        rosterEntry = rosterMap[user.id] || null;
+    } catch (error) {
+        console.error(`[${timestamp}] Roster lookup failed for ${user.tag} (${user.id}):`, error.message);
+        await interaction.reply({ embeds: [rosterErrorEmbed()], ephemeral: true });
+        return;
+    }
+    if (!rosterEntry) {
+        console.log(`[${timestamp}] Signup blocked (not on roster) for ${user.tag} (${user.id})`);
+        await interaction.reply({ embeds: [notOnRosterEmbed()], ephemeral: true });
+        return;
+    }
+
+    // Step 1: division selection.
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('tdlsignup_HLD').setLabel('HLD').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('tdlsignup_LLD').setLabel('LLD').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('tdlsignup_Both').setLabel('Both').setStyle(ButtonStyle.Success)
+    );
+
+    const embed = new EmbedBuilder()
+        .setColor(BRAND_COLOR)
+        .setTitle('Toeshank Dueling League — Signup')
+        .setDescription(
+            `Event: **${getEventDateString()} — 6:00 PM ET**\n\n` +
+            '**Step 1:** Choose your division.\n' +
+            '- **HLD** — High Level Dueling\n' +
+            '- **LLD** — Low Level Dueling\n' +
+            '- **Both** — sign up for both'
+        )
+        .setFooter({ text: 'Toeshank Dueling League' })
+        .setTimestamp();
+
+    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+    console.log(`[${timestamp}] Division selection shown to ${user.tag} (${user.id})`);
+}
+
 module.exports = {
     // Exposed for unit testing (see test/upsert.test.js). Not used by the bot runtime.
     _internals: { upsertSignups, REG_TAB, COL, CATEGORY_DIVISIONS },
@@ -184,76 +259,17 @@ module.exports = {
         .setDescription('Sign up for the weekly Toeshank Dueling League event'),
 
     async execute(interaction, sheets, auth) {
-        const timestamp = new Date().toISOString();
-        const user = interaction.user;
-
-        // Guild-only (public confirmation + role check both require guild context).
-        if (!interaction.guild || !interaction.member) {
-            await interaction.reply({
-                content: 'Please run `/signup` in the TDL server, not in DMs.',
-                ephemeral: true
-            });
-            return;
-        }
-
-        // Chrono gate.
-        if (!isRegistrationOpen()) {
-            console.log(`[${timestamp}] Signup blocked (window closed) for ${user.tag} (${user.id})`);
-            await interaction.reply({ embeds: [windowClosedEmbed()], ephemeral: true });
-            return;
-        }
-
-        // Role gate.
-        if (!hasDuelerRole(interaction)) {
-            console.log(`[${timestamp}] Signup blocked (no ${DUELER_ROLE} role) for ${user.tag} (${user.id})`);
-            await interaction.reply({ embeds: [noRoleEmbed()], ephemeral: true });
-            return;
-        }
-
-        // Roster gate — the user must exist in the Roster tab (by UUID) to sign up.
-        // Uses the cached roster map (read-through Redis; /register evicts it).
-        // Fail CLOSED on a lookup error so a Sheets hiccup can't bypass the gate.
-        let rosterEntry;
-        try {
-            const rosterMap = await getRosterMap({ sheets, auth, spreadsheetId: SPREADSHEET_ID });
-            rosterEntry = rosterMap[user.id] || null;
-        } catch (error) {
-            console.error(`[${timestamp}] Roster lookup failed for ${user.tag} (${user.id}):`, error.message);
-            await interaction.reply({ embeds: [rosterErrorEmbed()], ephemeral: true });
-            return;
-        }
-        if (!rosterEntry) {
-            console.log(`[${timestamp}] Signup blocked (not on roster) for ${user.tag} (${user.id})`);
-            await interaction.reply({ embeds: [notOnRosterEmbed()], ephemeral: true });
-            return;
-        }
-
-        // Step 1: division selection.
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('tdlsignup_HLD').setLabel('HLD').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('tdlsignup_LLD').setLabel('LLD').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('tdlsignup_Both').setLabel('Both').setStyle(ButtonStyle.Success)
-        );
-
-        const embed = new EmbedBuilder()
-            .setColor(BRAND_COLOR)
-            .setTitle('Toeshank Dueling League — Signup')
-            .setDescription(
-                `Event: **${getEventDateString()} — 6:00 PM ET**\n\n` +
-                '**Step 1:** Choose your division.\n' +
-                '- **HLD** — High Level Dueling\n' +
-                '- **LLD** — Low Level Dueling\n' +
-                '- **Both** — sign up for both'
-            )
-            .setFooter({ text: 'Toeshank Dueling League' })
-            .setTimestamp();
-
-        await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
-        console.log(`[${timestamp}] Division selection shown to ${user.tag} (${user.id})`);
+        return startSignup(interaction, sheets, auth);
     },
 
-    async handleButton(interaction) {
+    async handleButton(interaction, sheets, auth) {
         if (!interaction.customId.startsWith('tdlsignup_')) return false;
+
+        // Panel "Sign Up" button → run the same gated entry flow as /signup.
+        if (interaction.customId === 'tdlsignup_panel') {
+            await startSignup(interaction, sheets, auth);
+            return true;
+        }
 
         const category = interaction.customId.replace('tdlsignup_', ''); // HLD | LLD | Both
         if (!CATEGORY_DIVISIONS[category]) {
@@ -335,6 +351,12 @@ module.exports = {
             invalidateSignupsCache().catch(evErr =>
                 console.error(`[${timestamp}] Signups cache evict failed (non-fatal):`, evErr.message)
             );
+
+            // Refresh the live signup panel (if one is bound). Lazy require avoids
+            // a load-time cycle; fire-and-forget so it never blocks the reply.
+            require('./tdlpanel')
+                .refreshSignupPanel(interaction.client, sheets, auth)
+                .catch(pErr => console.error(`[${timestamp}] Panel refresh failed (non-fatal):`, pErr.message));
 
             const createdCount = results.filter(r => r.action === 'created').length;
             const updatedCount = results.filter(r => r.action === 'updated').length;
