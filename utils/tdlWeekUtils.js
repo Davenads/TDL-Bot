@@ -1,9 +1,9 @@
 /**
  * Utility functions for TDL registration-window and week calculations.
  *
- * TDL event:            Mondays 6:00 PM ET (~4 hours).
- * Registration window:  Opens Tuesday 12:00 AM ET, closes Sunday 11:59 PM ET.
- *                       All day Monday is CLOSED so Toeshank can build the
+ * TDL event:            Tuesdays 6:00 PM ET (~4 hours).
+ * Registration window:  Opens Wednesday 12:00 AM ET, closes Monday 11:59 PM ET.
+ *                       All day Tuesday is CLOSED so Toeshank can build the
  *                       matchups from the signups and run the event.
  *
  * Day indices (JS getDay): 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat.
@@ -21,48 +21,49 @@ function nowET() {
 
 /**
  * Is registration currently open?
- * Open Tuesday 12:00 AM ET through Sunday 11:59 PM ET; closed all day Monday.
+ * Open Wednesday 12:00 AM ET through Monday 11:59 PM ET; closed all day Tuesday.
+ * @param {Date} [now] - Injectable clock for testing (defaults to ET now).
  * @returns {boolean}
  */
-function isRegistrationOpen() {
-    const day = nowET().getDay();
-    // Closed only on Monday (event/organize day). Open Tue..Sun.
-    return day !== 1;
+function isRegistrationOpen(now = nowET()) {
+    const day = now.getDay();
+    // Closed only on Tuesday (event/organize day). Open Wed..Mon.
+    return day !== 2;
 }
 
 /**
- * Start of the current registration cycle: most recent Tuesday 12:00 AM ET.
+ * Start of the current registration cycle: most recent Wednesday 12:00 AM ET.
  * Used to scope "current week" signups for dedupe and recent-signup views.
+ * @param {Date} [now] - Injectable clock for testing (defaults to ET now).
  * @returns {Date}
  */
-function getWeekStartDate() {
-    const now = nowET();
+function getWeekStartDate(now = nowET()) {
     const day = now.getDay();
-    // Days back to the most recent Tuesday. Sun(0)->5, Mon(1)->6, Tue(2)->0, ...
-    const daysSinceTuesday = day >= 2 ? day - 2 : day + 5;
+    // Days back to the most recent Wednesday. Sun(0)->4, Mon(1)->5, Tue(2)->6, Wed(3)->0, ...
+    const daysSinceWednesday = day >= 3 ? day - 3 : day + 4;
     const start = new Date(now);
-    start.setDate(now.getDate() - daysSinceTuesday);
+    start.setDate(now.getDate() - daysSinceWednesday);
     start.setHours(0, 0, 0, 0);
     return start;
 }
 
 /**
- * The event date this registration cycle points at: upcoming Monday 6:00 PM ET.
- * On Monday itself, returns today at 6:00 PM ET.
+ * The event date this registration cycle points at: upcoming Tuesday 6:00 PM ET.
+ * On Tuesday itself, returns today at 6:00 PM ET.
+ * @param {Date} [now] - Injectable clock for testing (defaults to ET now).
  * @returns {Date}
  */
-function getCurrentEventDate() {
-    const now = nowET();
+function getCurrentEventDate(now = nowET()) {
     const day = now.getDay();
-    const daysUntilMonday = (1 - day + 7) % 7; // 0 if already Monday
+    const daysUntilTuesday = (2 - day + 7) % 7; // 0 if already Tuesday
     const event = new Date(now);
-    event.setDate(now.getDate() + daysUntilMonday);
+    event.setDate(now.getDate() + daysUntilTuesday);
     event.setHours(18, 0, 0, 0);
     return event;
 }
 
 /**
- * Human-friendly event date, e.g. "Monday, August 31".
+ * Human-friendly event date, e.g. "Tuesday, August 31".
  * @returns {string}
  */
 function getEventDateString() {

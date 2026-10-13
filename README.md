@@ -1,7 +1,7 @@
 # TDL-Bot
 
 Discord bot for the **Toeshank Dueling League (TDL)** — a weekly Diablo 2: Resurrected
-PvP dueling event hosted by Toeshank. The event runs Mondays at 6:00 PM ET (~4 hours).
+PvP dueling event hosted by Toeshank. The event runs Tuesdays at 6:00 PM ET (~4 hours).
 
 The bot handles weekly event signups, writing directly to the league's Google Sheet
 (their pseudo-database) and capturing each player's Discord UUID and live username —
@@ -51,8 +51,8 @@ Behavior:
   it drifted. Use `/register` to get on the roster. The gate read is served from a
   Redis cache (`tdl:roster`, 10-min TTL) that `/register` evicts, so a just-registered
   player can sign up immediately; with Redis down it falls back to a live Sheets read.
-- Registration window: opens Tuesday 12:00 AM ET, closes Sunday 11:59 PM ET (all day
-  Monday is closed so matchups can be built before the event).
+- Registration window: opens Wednesday 12:00 AM ET, closes Monday 11:59 PM ET (all day
+  Tuesday is closed so matchups can be built before the event).
 
 ## `/register`
 

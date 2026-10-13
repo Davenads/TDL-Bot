@@ -12,7 +12,7 @@
  *    a live Sheets read on a miss (and always when Redis is down).
  *  - `/signup` evicts via `invalidateSignupsCache` after each successful upsert.
  *  - The cached payload is stamped with the `weekStart` it was built for, so a
- *    Tuesday week-rollover can never serve last week's list (guard beyond TTL).
+ *    Wednesday week-rollover can never serve last week's list (guard beyond TTL).
  */
 
 const { cacheGet, cacheSet, cacheDel } = require('./cache');
