@@ -63,10 +63,12 @@ module.exports = {
 
     data: new SlashCommandBuilder()
         .setName('tdlmod')
-        .setDescription('Moderator tools for TDL signups')
-        // Hidden by default (admins only); grant the mod role access via
-        // Server Settings → Integrations → TDL-Bot → /tdlmod.
-        .setDefaultMemberPermissions('0'),
+        .setDescription('Moderator tools for TDL signups'),
+    // Intentionally NOT hidden via setDefaultMemberPermissions: enforcement is
+    // done in code (memberCanManagePanel gate in startModTools/handleButton), so
+    // non-mods may SEE /tdlmod in the picker but get an ephemeral denial if they
+    // invoke it. This avoids the manual Integrations grant that a role-ID-scoped
+    // hide would require.
 
     async execute(interaction, sheets, auth) {
         return startModTools(interaction);

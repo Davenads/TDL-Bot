@@ -70,10 +70,14 @@ test('exposes a /tdlmod slash command', () => {
     assert.strictEqual(tdlmod.data.name, 'tdlmod');
 });
 
-test('command is hidden by default (default_member_permissions = 0)', () => {
-    // discord.js serializes the builder; 0 => admins-only until granted in Integrations.
+test('command is NOT permission-hidden (enforcement is in-code)', () => {
+    // No setDefaultMemberPermissions: non-mods may see /tdlmod in the picker but
+    // are denied in code. default_member_permissions should be null/undefined.
     const json = tdlmod.data.toJSON();
-    assert.strictEqual(json.default_member_permissions, '0');
+    assert.ok(
+        json.default_member_permissions === null || json.default_member_permissions === undefined,
+        `expected no default_member_permissions, got ${json.default_member_permissions}`
+    );
 });
 
 // ---- startModTools (entry) ----
