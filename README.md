@@ -51,8 +51,8 @@ Behavior:
   it drifted. Use `/register` to get on the roster. The gate read is served from a
   Redis cache (`tdl:roster`, 10-min TTL) that `/register` evicts, so a just-registered
   player can sign up immediately; with Redis down it falls back to a live Sheets read.
-- Registration window: opens Wednesday 12:00 AM ET, closes Monday 11:59 PM ET (all day
-  Tuesday is closed so matchups can be built before the event).
+- Registration window: opens Wednesday 12:00 AM ET, closes Monday 7:00 PM ET (then
+  closed through Tuesday, the event/organize day, so Toeshank can build the fight card).
 
 ## `/register`
 

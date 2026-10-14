@@ -67,8 +67,8 @@ function windowClosedEmbed() {
             'TDL registration is currently closed.\n\n' +
             '**Registration Window**\n' +
             'Opens: **Wednesday 12:00 AM ET**\n' +
-            'Closes: **Monday 11:59 PM ET**\n\n' +
-            'Signups close the day before the event so matchups can be built. ' +
+            'Closes: **Monday 7:00 PM ET**\n\n' +
+            'Signups close Monday evening so Toeshank can build the fight card. ' +
             'The event runs **Tuesdays at 6:00 PM ET**.'
         )
         .setFooter({ text: 'Toeshank Dueling League' })

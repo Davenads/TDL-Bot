@@ -62,6 +62,14 @@ test('registration is CLOSED on Tuesday (event/organize day)', () => {
     assert.strictEqual(isRegistrationOpen(TUE), false);
 });
 
+test('registration CLOSES Monday 7:00 PM ET (time-aware boundary)', () => {
+    assert.strictEqual(isRegistrationOpen(D(2026, 9, 12, 18)), true, '6 PM Mon still open');
+    assert.strictEqual(isRegistrationOpen(new Date(2026, 9, 12, 18, 59, 0)), true, '6:59 PM Mon still open');
+    assert.strictEqual(isRegistrationOpen(D(2026, 9, 12, 19)), false, '7:00 PM Mon closed (boundary)');
+    assert.strictEqual(isRegistrationOpen(D(2026, 9, 12, 20)), false, '8 PM Mon closed');
+    assert.strictEqual(isRegistrationOpen(D(2026, 9, 12, 23)), false, '11 PM Mon closed');
+});
+
 // ---- getWeekStartDate: most recent Wednesday 00:00 ----
 test('weekStart is always a Wednesday at local midnight', () => {
     for (const d of [SUN, MON, TUE, WED, THU, FRI, SAT]) {
