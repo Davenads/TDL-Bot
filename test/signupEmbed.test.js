@@ -11,7 +11,7 @@ process.env.TEST_MODE = 'true'; // MUST precede requiring signupUtils (REG_TAB r
 const assert = require('assert');
 const redisClient = require('../utils/redisClient');
 const { formatSheetTimestamp } = require('../utils/tdlWeekUtils');
-const { buildSignupsEmbed, fieldValue } = require('../utils/signupEmbed');
+const { buildSignupsEmbed, buildModSignupsEmbed, fieldValue } = require('../utils/signupEmbed');
 
 // Redis OFF → cacheGet returns null, every call reads Sheets live.
 redisClient.isReady = () => false;
@@ -201,6 +201,70 @@ test('signups read failure propagates (caller shows unavailable)', async () => {
         () => buildSignupsEmbed({ sheets, auth: AUTH, spreadsheetId: SHEET_ID }),
         /signups boom/
     );
+});
+
+// ---- Mod view (Data Name + Discord name) ----
+
+test('mod view: shows "Data Name (Discord name)" per division', async () => {
+    const sheets = makeSheets({
+        signups: [
+            SIGNUP_HEADER,
+            ['', NOW, 'U1', 'aliceDiscord', '', 'HLD'],
+            ['', NOW, 'U2', 'bobDiscord', 'gg', 'LLD'],
+            ['', STALE, 'U3', 'oldcarol', '', 'HLD'] // last week -> excluded
+        ],
+        roster: [ROSTER_HEADER, ['Zara', 'aliceDiscord', 'U1'], ['Aaron', 'bobDiscord', 'U2']]
+    });
+    const e = embedOf(await buildModSignupsEmbed({ sheets, auth: AUTH, spreadsheetId: SHEET_ID }));
+    assert.strictEqual(e.title, 'TDL Signups — Mod View');
+    assert.ok(e.description.includes('**2** duelers'), 'counts 2 unique duelers');
+    assert.strictEqual(e.fields['HLD (1)'], 'Zara (aliceDiscord)');
+    assert.strictEqual(e.fields['LLD (1)'], 'Aaron (bobDiscord)');
+});
+
+test('mod view: falls back to Discord name when UUID not on roster', async () => {
+    const sheets = makeSheets({
+        signups: [SIGNUP_HEADER, ['', NOW, 'U9', 'mysteryDiscord', '', 'HLD']],
+        roster: [ROSTER_HEADER]
+    });
+    const e = embedOf(await buildModSignupsEmbed({ sheets, auth: AUTH, spreadsheetId: SHEET_ID }));
+    assert.strictEqual(e.fields['HLD (1)'], 'mysteryDiscord', 'no roster entry -> Discord name only');
+});
+
+test('mod view: dedupes a doubled-up UUID, counts once', async () => {
+    const sheets = makeSheets({
+        signups: [
+            SIGNUP_HEADER,
+            ['', NOW, 'U1', 'alice', '', 'HLD'],
+            ['', NOW, 'U1', 'alice', 'dup', 'HLD']
+        ],
+        roster: [ROSTER_HEADER, ['Alice', 'alice', 'U1']]
+    });
+    const e = embedOf(await buildModSignupsEmbed({ sheets, auth: AUTH, spreadsheetId: SHEET_ID }));
+    assert.ok(e.description.includes('**1** dueler'), 'one unique dueler');
+    assert.strictEqual(e.fields['HLD (1)'], 'Alice (alice)');
+});
+
+test('mod view: empty week renders _None yet_ per division', async () => {
+    const sheets = makeSheets({ signups: [SIGNUP_HEADER], roster: [ROSTER_HEADER] });
+    const e = embedOf(await buildModSignupsEmbed({ sheets, auth: AUTH, spreadsheetId: SHEET_ID }));
+    assert.strictEqual(e.fields['HLD (0)'], '_None yet_');
+    assert.strictEqual(e.fields['LLD (0)'], '_None yet_');
+});
+
+test('mod view: roster read failure is non-fatal (Discord names)', async () => {
+    const sheets = {
+        spreadsheets: {
+            values: {
+                get: async ({ range }) => {
+                    if (range.includes('Roster')) throw new Error('roster boom');
+                    return { data: { values: [SIGNUP_HEADER, ['', NOW, 'U1', 'aliceDiscord', '', 'HLD']] } };
+                }
+            }
+        }
+    };
+    const e = embedOf(await buildModSignupsEmbed({ sheets, auth: AUTH, spreadsheetId: SHEET_ID }));
+    assert.strictEqual(e.fields['HLD (1)'], 'aliceDiscord', 'Discord name fallback on roster error');
 });
 
 // ---- Run ----

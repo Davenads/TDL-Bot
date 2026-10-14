@@ -112,4 +112,61 @@ async function buildSignupsEmbed({ sheets, auth, spreadsheetId, countsOnly = fal
     return embed;
 }
 
-module.exports = { buildSignupsEmbed, fieldValue, DIVISIONS };
+/**
+ * Build the MOD-ONLY current-week signups embed: full roster showing BOTH the
+ * Data Name and the Discord name per division, e.g. "Zara (aliceDiscord)".
+ * Rendered ephemerally behind the mod gate — names are never shown on the public
+ * panel (which is counts-only). Non-fatal roster read: falls back to the Discord
+ * name alone when a UUID isn't on the roster (or the roster read hiccups).
+ *
+ * @param {object} args
+ * @param {object} args.sheets - googleapis sheets client
+ * @param {object} args.auth   - google auth
+ * @param {string} args.spreadsheetId
+ * @returns {Promise<EmbedBuilder>}
+ * @throws if the signups Sheets read fails (caller presents "unavailable").
+ */
+async function buildModSignupsEmbed({ sheets, auth, spreadsheetId }) {
+    const rows = await getCurrentWeekSignups({ sheets, auth, spreadsheetId });
+
+    let rosterMap = {};
+    try {
+        rosterMap = await getRosterMap({ sheets, auth, spreadsheetId });
+    } catch (rosterErr) {
+        console.error(`[${new Date().toISOString()}] buildModSignupsEmbed roster lookup failed (non-fatal):`, rosterErr.message);
+    }
+
+    // Group by division, deduped by UUID. Value = "Data Name (Discord name)".
+    const byDivision = {};
+    for (const div of DIVISIONS) byDivision[div] = new Map(); // uuid -> label
+    const allUuids = new Set();
+    for (const row of rows) {
+        const div = row[COL.CATEGORY];
+        if (!byDivision[div]) continue;
+        const uuid = row[COL.UUID];
+        if (!uuid) continue;
+        const discordName = row[COL.USERNAME] || 'unknown';
+        const dataName = rosterMap[uuid] && rosterMap[uuid].dataName;
+        byDivision[div].set(uuid, dataName ? `${dataName} (${discordName})` : discordName);
+        allUuids.add(uuid);
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor(BRAND_COLOR)
+        .setTitle('TDL Signups — Mod View')
+        .setDescription(
+            `Event: **${getEventDateString()} — 6:00 PM ET**\n` +
+            `**${allUuids.size}** ${allUuids.size === 1 ? 'dueler' : 'duelers'} signed up so far.`
+        )
+        .setFooter({ text: 'Toeshank Dueling League' })
+        .setTimestamp();
+
+    for (const div of DIVISIONS) {
+        const names = [...byDivision[div].values()].sort((a, b) => a.localeCompare(b));
+        embed.addFields({ name: `${div} (${names.length})`, value: fieldValue(names), inline: false });
+    }
+
+    return embed;
+}
+
+module.exports = { buildSignupsEmbed, buildModSignupsEmbed, fieldValue, DIVISIONS };

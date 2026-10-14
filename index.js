@@ -43,7 +43,8 @@ for (const file of commandFiles) {
 // ---- Button routing (O(1) by customId prefix before the first underscore) ----
 const BUTTON_ROUTING = {
     tdlsignup: 'signup',
-    tdlwithdraw: 'withdraw'
+    tdlwithdraw: 'withdraw',
+    tdlmod: 'tdlmod'
 };
 
 client.once('ready', async () => {
