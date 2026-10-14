@@ -75,7 +75,7 @@ function panelButtons() {
 async function buildPanelPayload(sheets, auth) {
     let rosterEmbed;
     try {
-        rosterEmbed = await buildSignupsEmbed({ sheets, auth, spreadsheetId: SPREADSHEET_ID });
+        rosterEmbed = await buildSignupsEmbed({ sheets, auth, spreadsheetId: SPREADSHEET_ID, countsOnly: true });
     } catch (err) {
         console.error(`[${new Date().toISOString()}] panel roster build failed:`, err.message);
         rosterEmbed = rosterUnavailableEmbed();

@@ -2,12 +2,14 @@
  * Shared renderer for the "who's signed up this week" embed.
  *
  * Single source of truth for the current-week roster view, used by BOTH:
- *   - `/recentsignups` (ephemeral, on demand), and
- *   - the persistent signup panel (Embed B, refreshed live).
+ *   - `/recentsignups` (ephemeral, on demand) — full NAME list per division, and
+ *   - the persistent signup panel (Embed B, refreshed live) — COUNTS only
+ *     (`countsOnly: true`), i.e. how many duelers are in each format.
  *
- * Names-only, grouped by division (`HLD (n)` / `LLD (n)`), sorted, deduped by
- * UUID. Data Names come from the cached Roster map; a missing roster entry (or a
- * roster read hiccup) falls back to the stored Discord username, then 'Unknown'.
+ * Names-only mode: grouped by division (`HLD (n)` / `LLD (n)`), sorted, deduped
+ * by UUID. Data Names come from the cached Roster map; a missing roster entry (or
+ * a roster read hiccup) falls back to the stored Discord username, then 'Unknown'.
+ * Counts-only mode skips the roster lookup entirely (no names rendered).
  *
  * Read freshness is the CALLER's concern: this builds off `getCurrentWeekSignups`
  * (read-through cache). The panel refresher evicts first for a forced-fresh view;
@@ -49,19 +51,23 @@ function fieldValue(names) {
  * @param {object} args.sheets - googleapis sheets client
  * @param {object} args.auth   - google auth
  * @param {string} args.spreadsheetId
+ * @param {boolean} [args.countsOnly=false] - Render per-division COUNTS only
+ *   (no names, no roster lookup). Used by the public panel.
  * @returns {Promise<EmbedBuilder>}
  * @throws if the signups Sheets read fails (caller presents "unavailable").
  */
-async function buildSignupsEmbed({ sheets, auth, spreadsheetId }) {
+async function buildSignupsEmbed({ sheets, auth, spreadsheetId, countsOnly = false }) {
     const rows = await getCurrentWeekSignups({ sheets, auth, spreadsheetId });
 
-    // Resolve Data Names via the cached roster map. Non-fatal: fall back to the
-    // stored Discord username if the roster read hiccups.
+    // Resolve Data Names via the cached roster map — only when we render names.
+    // Non-fatal: fall back to the stored Discord username if the roster hiccups.
     let rosterMap = {};
-    try {
-        rosterMap = await getRosterMap({ sheets, auth, spreadsheetId });
-    } catch (rosterErr) {
-        console.error(`[${new Date().toISOString()}] buildSignupsEmbed roster lookup failed (non-fatal):`, rosterErr.message);
+    if (!countsOnly) {
+        try {
+            rosterMap = await getRosterMap({ sheets, auth, spreadsheetId });
+        } catch (rosterErr) {
+            console.error(`[${new Date().toISOString()}] buildSignupsEmbed roster lookup failed (non-fatal):`, rosterErr.message);
+        }
     }
     const nameFor = (uuid, fallback) =>
         (rosterMap[uuid] && rosterMap[uuid].dataName) || fallback || 'Unknown';
@@ -76,7 +82,7 @@ async function buildSignupsEmbed({ sheets, auth, spreadsheetId }) {
         if (!byDivision[div]) continue; // ignore any unexpected category
         const uuid = row[COL.UUID];
         if (!uuid) continue;
-        byDivision[div].set(uuid, nameFor(uuid, row[COL.USERNAME]));
+        byDivision[div].set(uuid, countsOnly ? true : nameFor(uuid, row[COL.USERNAME]));
         allUuids.add(uuid);
     }
 
@@ -90,9 +96,17 @@ async function buildSignupsEmbed({ sheets, auth, spreadsheetId }) {
         .setFooter({ text: 'Toeshank Dueling League' })
         .setTimestamp();
 
-    for (const div of DIVISIONS) {
-        const names = [...byDivision[div].values()].sort((a, b) => a.localeCompare(b));
-        embed.addFields({ name: `${div} (${names.length})`, value: fieldValue(names), inline: false });
+    if (countsOnly) {
+        // Public panel: just the headcount per format, no names.
+        for (const div of DIVISIONS) {
+            const n = byDivision[div].size;
+            embed.addFields({ name: div, value: `**${n}** signed up`, inline: true });
+        }
+    } else {
+        for (const div of DIVISIONS) {
+            const names = [...byDivision[div].values()].sort((a, b) => a.localeCompare(b));
+            embed.addFields({ name: `${div} (${names.length})`, value: fieldValue(names), inline: false });
+        }
     }
 
     return embed;

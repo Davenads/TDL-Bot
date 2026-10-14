@@ -134,6 +134,67 @@ test('roster read failure is non-fatal (falls back to usernames)', async () => {
     assert.strictEqual(e.fields['HLD (1)'], 'aliceDiscord', 'username fallback on roster error');
 });
 
+test('countsOnly: renders per-division headcounts, no names', async () => {
+    const sheets = makeSheets({
+        signups: [
+            SIGNUP_HEADER,
+            ['', NOW, 'U1', 'aliceDiscord', '', 'HLD'],
+            ['', NOW, 'U2', 'bobDiscord', '', 'HLD'],
+            ['', NOW, 'U3', 'carolDiscord', '', 'LLD'],
+            ['', STALE, 'U4', 'oldDiscord', '', 'LLD'] // last week -> excluded
+        ],
+        roster: [ROSTER_HEADER, ['Zara', 'aliceDiscord', 'U1']]
+    });
+    const e = embedOf(await buildSignupsEmbed({ sheets, auth: AUTH, spreadsheetId: SHEET_ID, countsOnly: true }));
+    assert.ok(e.description.includes('**3** duelers'), 'counts 3 unique duelers');
+    assert.strictEqual(e.fields['HLD'], '**2** signed up', 'HLD headcount, no names');
+    assert.strictEqual(e.fields['LLD'], '**1** signed up', 'LLD headcount, no names');
+    // No name should leak into the counts view.
+    assert.ok(!JSON.stringify(e.fields).includes('Zara'), 'roster name not rendered');
+});
+
+test('countsOnly: dedupes a doubled-up UUID in the headcount', async () => {
+    const sheets = makeSheets({
+        signups: [
+            SIGNUP_HEADER,
+            ['', NOW, 'U1', 'alice', '', 'HLD'],
+            ['', NOW, 'U1', 'alice', 'dup', 'HLD'] // manual double -> counted once
+        ],
+        roster: [ROSTER_HEADER]
+    });
+    const e = embedOf(await buildSignupsEmbed({ sheets, auth: AUTH, spreadsheetId: SHEET_ID, countsOnly: true }));
+    assert.strictEqual(e.fields['HLD'], '**1** signed up', 'doubled UUID counted once');
+    assert.strictEqual(e.fields['LLD'], '**0** signed up');
+});
+
+test('countsOnly: empty week shows zero in each format', async () => {
+    const sheets = makeSheets({ signups: [SIGNUP_HEADER], roster: [ROSTER_HEADER] });
+    const e = embedOf(await buildSignupsEmbed({ sheets, auth: AUTH, spreadsheetId: SHEET_ID, countsOnly: true }));
+    assert.ok(e.description.includes('**0** duelers'), 'zero duelers');
+    assert.strictEqual(e.fields['HLD'], '**0** signed up');
+    assert.strictEqual(e.fields['LLD'], '**0** signed up');
+});
+
+test('countsOnly: skips the roster read entirely (no lookup, no throw)', async () => {
+    let rosterReads = 0;
+    const sheets = {
+        spreadsheets: {
+            values: {
+                get: async ({ range }) => {
+                    if (range.includes('Roster')) {
+                        rosterReads++;
+                        throw new Error('roster should not be read in countsOnly');
+                    }
+                    return { data: { values: [SIGNUP_HEADER, ['', NOW, 'U1', 'aliceDiscord', '', 'HLD']] } };
+                }
+            }
+        }
+    };
+    const e = embedOf(await buildSignupsEmbed({ sheets, auth: AUTH, spreadsheetId: SHEET_ID, countsOnly: true }));
+    assert.strictEqual(rosterReads, 0, 'roster tab never queried in countsOnly');
+    assert.strictEqual(e.fields['HLD'], '**1** signed up');
+});
+
 test('signups read failure propagates (caller shows unavailable)', async () => {
     const sheets = { spreadsheets: { values: { get: async () => { throw new Error('signups boom'); } } } };
     await assert.rejects(
