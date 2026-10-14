@@ -29,8 +29,11 @@ const {
 // ---- Config ----
 const DUELER_ROLE = process.env.DUELER_ROLE_NAME || 'Dueler';
 const SPREADSHEET_ID = process.env.TDL_SPREADSHEET_ID || '1gz1sIYGUf-vxMCmsl7b7icFfI9HlAYSbs1rOFRCz1Ww';
-// Optional dedicated channel for public signup confirmations; falls back to the invoking channel.
-const SIGNUP_CHANNEL_ID = process.env.SIGNUP_CHANNEL_ID || null;
+// Dedicated channel for public signup confirmations. Hardcoded default (the
+// prod "logs" channel) keeps confirmations out of the panel channel without a
+// Heroku config var; env override wins if set. Falls back to the invoking
+// channel only if the resolved channel is unavailable at send time.
+const SIGNUP_CHANNEL_ID = process.env.SIGNUP_CHANNEL_ID || '1559974959412027432';
 // REG_TAB (test/prod tab) and COL (Registration schema) come from signupUtils so
 // the read cache and the write upsert share one source of truth.
 
