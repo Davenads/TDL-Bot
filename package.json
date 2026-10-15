@@ -8,7 +8,7 @@
     "deploy-cmds": "node deploy-commands.js",
     "clear-cmds": "node clear-commands.js",
     "clear-cmds-global": "node clear-commands.js --global",
-    "test": "node test/upsert.test.js && node test/roster.test.js && node test/cache.test.js && node test/signups.test.js && node test/signupEmbed.test.js && node test/panelStore.test.js && node test/withdraw.test.js && node test/tdlpanel.test.js && node test/tdlmod.test.js && node test/tdlWeekUtils.test.js && node test/redis.test.js"
+    "test": "node test/upsert.test.js && node test/roster.test.js && node test/cache.test.js && node test/signups.test.js && node test/signupEmbed.test.js && node test/panelStore.test.js && node test/withdraw.test.js && node test/tdlpanel.test.js && node test/tdlmod.test.js && node test/signupReminder.test.js && node test/tdlWeekUtils.test.js && node test/redis.test.js"
   },
   "engines": {
     "node": "20.x"

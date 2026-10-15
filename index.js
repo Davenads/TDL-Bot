@@ -69,6 +69,13 @@ client.once('ready', async () => {
     } catch (error) {
         console.warn('[panel] boot init failed (non-fatal):', error.message);
     }
+
+    // Start the periodic signup-reminder post in TDL-chat. Non-fatal.
+    try {
+        require('./utils/signupReminder').startReminderSchedule(client, sheets, auth);
+    } catch (error) {
+        console.warn('[reminder] schedule init failed (non-fatal):', error.message);
+    }
 });
 
 // ---- Interaction handling ----
