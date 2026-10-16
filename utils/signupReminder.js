@@ -32,7 +32,7 @@ const CRON_EXPR = '0 0,8,16 * * *';
 // Only the 4:00 PM post pings the reminder role (daytime nudge); the 12 AM / 8 AM
 // posts stay silent. Ping goes in message content (not the embed) so it notifies.
 const PING_HOUR = 16;
-const PING_ROLE_ID = process.env.REMINDER_PING_ROLE_ID || '1551825607036248064';
+const PING_ROLE_ID = process.env.REMINDER_PING_ROLE_ID || '1537139321797345320';
 
 // Option B state: id of the last reminder we posted (in-memory).
 let lastMessageId = null;
