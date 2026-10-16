@@ -23,7 +23,9 @@ const SIGNUP_HEADER = ['Status', 'Timestamp', 'Discord UUID', 'Discord Username'
 const ROSTER_HEADER = ['Data Name', 'Discord Name', 'UUID'];
 
 // Anchor week (per repo convention): Sun Oct 11 – Sat Oct 17 2026, event Tue 13.
-const OPEN_THU = new Date(2026, 9, 15, 12, 0, 0);  // Thursday noon — window OPEN
+const OPEN_THU = new Date(2026, 9, 15, 12, 0, 0);  // Thursday noon — window OPEN, no ping
+const OPEN_THU_4PM = new Date(2026, 9, 15, 16, 0, 0); // Thursday 4 PM — window OPEN, ping hour
+const OPEN_THU_8AM = new Date(2026, 9, 15, 8, 0, 0);  // Thursday 8 AM — window OPEN, no ping
 const CLOSED_MON = new Date(2026, 9, 12, 20, 0, 0); // Monday 8 PM — CLOSED (post-7PM)
 const CLOSED_TUE = new Date(2026, 9, 13, 12, 0, 0); // Tuesday noon — CLOSED (event day)
 
@@ -126,6 +128,35 @@ test('postReminderNow: deletes the prior reminder before posting the next', asyn
     assert.strictEqual(second, true);
     assert.strictEqual(ch.rec.sent.length, 2, 'two posts total');
     assert.deepStrictEqual(ch.rec.deleted, ['m1'], 'the first reminder was deleted');
+});
+
+// ---- role ping: 4 PM only ----
+test('postReminderNow: pings the role on the 4 PM post (content, not embed)', async () => {
+    reminder._resetForTest();
+    const ch = fakeChannel();
+    const posted = await reminder.postReminderNow(fakeClient(ch), makeSheets(SIGNUPS), AUTH, { now: OPEN_THU_4PM });
+    assert.strictEqual(posted, true);
+    const payload = ch.rec.sent[0].payload;
+    assert.strictEqual(payload.content, `<@&${reminder.PING_ROLE_ID}>`, 'role mention in content');
+    assert.deepStrictEqual(payload.allowedMentions, { roles: [reminder.PING_ROLE_ID] });
+    // Ping must NOT be baked into the embed.
+    assert.ok(!(payload.embeds[0].data.description || '').includes(reminder.PING_ROLE_ID));
+});
+
+test('postReminderNow: no ping on the 8 AM post', async () => {
+    reminder._resetForTest();
+    const ch = fakeChannel();
+    await reminder.postReminderNow(fakeClient(ch), makeSheets(SIGNUPS), AUTH, { now: OPEN_THU_8AM });
+    const payload = ch.rec.sent[0].payload;
+    assert.strictEqual(payload.content, undefined, 'no content ping outside 4 PM');
+    assert.strictEqual(payload.allowedMentions, undefined);
+});
+
+test('buildReminderPayload: ping flag toggles the role mention content', async () => {
+    const pinged = await reminder.buildReminderPayload(makeSheets(SIGNUPS), AUTH, { ping: true });
+    assert.strictEqual(pinged.content, `<@&${reminder.PING_ROLE_ID}>`);
+    const silent = await reminder.buildReminderPayload(makeSheets(SIGNUPS), AUTH, { ping: false });
+    assert.strictEqual(silent.content, undefined);
 });
 
 // ---- perms preflight ----

@@ -123,6 +123,7 @@ function formatSheetTimestamp(date = new Date()) {
 
 module.exports = {
     TIME_ZONE,
+    nowET,
     isRegistrationOpen,
     getWeekStartDate,
     getCurrentEventDate,

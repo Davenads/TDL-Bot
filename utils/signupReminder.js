@@ -19,7 +19,7 @@
 const cron = require('node-cron');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 const { buildSignupsEmbed } = require('./signupEmbed');
-const { isRegistrationOpen, TIME_ZONE } = require('./tdlWeekUtils');
+const { isRegistrationOpen, nowET, TIME_ZONE } = require('./tdlWeekUtils');
 const { invalidateSignupsCache } = require('./signupUtils');
 
 // ---- Config ----
@@ -29,6 +29,10 @@ const REMINDER_CHANNEL_ID = process.env.REMINDER_CHANNEL_ID || '1537111833260064
 const SPREADSHEET_ID = process.env.TDL_SPREADSHEET_ID || '1gz1sIYGUf-vxMCmsl7b7icFfI9HlAYSbs1rOFRCz1Ww';
 // Every 8 hours at fixed ET clock times: 12:00 AM, 8:00 AM, 4:00 PM.
 const CRON_EXPR = '0 0,8,16 * * *';
+// Only the 4:00 PM post pings the reminder role (daytime nudge); the 12 AM / 8 AM
+// posts stay silent. Ping goes in message content (not the embed) so it notifies.
+const PING_HOUR = 16;
+const PING_ROLE_ID = process.env.REMINDER_PING_ROLE_ID || '1551825607036248064';
 
 // Option B state: id of the last reminder we posted (in-memory).
 let lastMessageId = null;
@@ -44,12 +48,19 @@ function reminderButtons() {
 }
 
 /**
- * Build the reminder message payload: the counts embed + button row.
+ * Build the reminder message payload: the counts embed + button row. When
+ * `ping` is true, adds the role mention as message CONTENT (outside the embed,
+ * where pings actually fire) plus an allowedMentions whitelist for that role.
  * @throws if the signups Sheets read fails (caller decides how to handle).
  */
-async function buildReminderPayload(sheets, auth) {
+async function buildReminderPayload(sheets, auth, { ping = false } = {}) {
     const embed = await buildSignupsEmbed({ sheets, auth, spreadsheetId: SPREADSHEET_ID, countsOnly: true });
-    return { embeds: [embed], components: [reminderButtons()] };
+    const payload = { embeds: [embed], components: [reminderButtons()] };
+    if (ping) {
+        payload.content = `<@&${PING_ROLE_ID}>`;
+        payload.allowedMentions = { roles: [PING_ROLE_ID] };
+    }
+    return payload;
 }
 
 /**
@@ -61,10 +72,11 @@ async function buildReminderPayload(sheets, auth) {
  * @param {Date}   [opts.now] - injected clock for the window gate (tests).
  * @returns {Promise<boolean>} true if a new reminder was posted.
  */
-async function postReminderNow(client, sheets, auth, { now } = {}) {
+async function postReminderNow(client, sheets, auth, { now, ping } = {}) {
     const ts = new Date().toISOString();
+    const clock = now || nowET();
 
-    if (!isRegistrationOpen(now)) {
+    if (!isRegistrationOpen(clock)) {
         console.log(`[${ts}] [reminder] skipped — registration window closed`);
         return false;
     }
@@ -93,9 +105,12 @@ async function postReminderNow(client, sheets, auth, { now } = {}) {
     // Forced-fresh counts: evict so the reminder reflects the latest signups.
     try { await invalidateSignupsCache(); } catch { /* non-fatal */ }
 
+    // Only the 4 PM post pings the reminder role (unless overridden for tests).
+    const shouldPing = ping !== undefined ? ping : clock.getHours() === PING_HOUR;
+
     let payload;
     try {
-        payload = await buildReminderPayload(sheets, auth);
+        payload = await buildReminderPayload(sheets, auth, { ping: shouldPing });
     } catch (err) {
         console.error(`[${ts}] [reminder] payload build failed:`, err.message);
         return false;
@@ -142,6 +157,8 @@ module.exports = {
     reminderButtons,
     REMINDER_CHANNEL_ID,
     CRON_EXPR,
+    PING_ROLE_ID,
+    PING_HOUR,
     // Test-only: clear the in-memory "last message" tracker between cases.
     _resetForTest() { lastMessageId = null; }
 };
