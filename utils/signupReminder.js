@@ -6,10 +6,14 @@
  * during the closed window (Monday 7 PM ET through the Tuesday event) via the
  * shared `isRegistrationOpen` gate.
  *
- * Clutter handling = "replace previous" (Option B): the prior reminder is
- * deleted before the next is posted, so exactly one reminder is live but it
- * still re-surfaces at the bottom of chat each fire. Tracking is in-memory — a
- * dyno restart just orphans one old post (harmless), then replacement resumes.
+ * Clutter handling = "sweep previous": before posting a fresh reminder we scan
+ * the channel's recent history and delete EVERY prior reminder this bot posted
+ * (identified by author + the "TDL Signups" lead-embed signature), so exactly
+ * one reminder is live. This is restart-safe (no in-memory tracking to lose on a
+ * dyno cycle) and never touches the persistent /tdlpanel message — the bound
+ * panel id is explicitly excluded, and the panel's lead embed is a different
+ * title anyway. Scan window is the latest 100 messages (one fetch, no
+ * pagination); reminders buried deeper than that in an active chat are left.
  *
  * Reuses existing building blocks: `buildSignupsEmbed({ countsOnly: true })`
  * (the exact counts embed used by the panel) and the panel's button customIds
@@ -21,6 +25,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = re
 const { buildSignupsEmbed } = require('./signupEmbed');
 const { isRegistrationOpen, nowET, TIME_ZONE } = require('./tdlWeekUtils');
 const { invalidateSignupsCache } = require('./signupUtils');
+const { getPanelBinding } = require('./panelStore');
 
 // ---- Config ----
 // Hardcoded default (TDL-chat); env override stays available but no var is
@@ -33,9 +38,14 @@ const CRON_EXPR = '0 0,8,16 * * *';
 // posts stay silent. Ping goes in message content (not the embed) so it notifies.
 const PING_HOUR = 16;
 const PING_ROLE_ID = process.env.REMINDER_PING_ROLE_ID || '1537139321797345320';
+// Lead-embed title that marks one of OUR reminder posts. The /tdlpanel message
+// leads with a different title ("Toeshank Dueling League — Sign Up"), so this
+// distinguishes a reminder from the panel even in the same channel.
+const REMINDER_EMBED_TITLE = 'TDL Signups';
+// How many recent messages to scan when sweeping old reminders (Discord caps a
+// single fetch at 100; no pagination — see module doc).
+const SWEEP_LIMIT = 100;
 
-// Option B state: id of the last reminder we posted (in-memory).
-let lastMessageId = null;
 // Idempotency guard for the scheduled task.
 let task = null;
 
@@ -64,9 +74,49 @@ async function buildReminderPayload(sheets, auth, { ping = false } = {}) {
 }
 
 /**
+ * Delete every prior reminder this bot posted in the channel's recent history.
+ * A reminder is one authored by the bot whose lead embed is titled
+ * `REMINDER_EMBED_TITLE`. The currently-bound /tdlpanel message (if it lives in
+ * this channel) is explicitly skipped so we never nuke the panel. Best-effort:
+ * per-message delete failures are swallowed.
+ *
+ * @returns {Promise<number>} how many old reminders were deleted.
+ */
+async function sweepPreviousReminders(channel, client) {
+    const botId = client && client.user && client.user.id;
+    if (!botId || typeof channel.messages?.fetch !== 'function') return 0;
+
+    // Never delete the live persistent panel, even if it shares this channel.
+    let panelMessageId = null;
+    try {
+        const binding = await getPanelBinding();
+        if (binding && binding.channelId === channel.id) panelMessageId = binding.messageId;
+    } catch { /* no binding / store unavailable — nothing to protect */ }
+
+    let fetched;
+    try {
+        fetched = await channel.messages.fetch({ limit: SWEEP_LIMIT });
+    } catch (err) {
+        console.warn(`[reminder] history fetch failed during sweep:`, err.message);
+        return 0;
+    }
+
+    const list = Array.from(typeof fetched.values === 'function' ? fetched.values() : fetched);
+    let deleted = 0;
+    for (const msg of list) {
+        if (!msg || msg.id === panelMessageId) continue;
+        const authorId = msg.author && msg.author.id;
+        const leadTitle = msg.embeds && msg.embeds[0] && msg.embeds[0].title;
+        if (authorId !== botId || leadTitle !== REMINDER_EMBED_TITLE) continue;
+        try { await msg.delete(); deleted++; } catch { /* already gone */ }
+    }
+    return deleted;
+}
+
+/**
  * Gated reminder post. No-ops (returns false) when the registration window is
- * closed or the channel/perms are unavailable. On success deletes the previous
- * reminder (Option B) and posts a fresh one.
+ * closed or the channel/perms are unavailable. On success sweeps any prior
+ * reminders this bot left in the channel, then posts a fresh one.
  *
  * @param {object} [opts]
  * @param {Date}   [opts.now] - injected clock for the window gate (tests).
@@ -116,17 +166,11 @@ async function postReminderNow(client, sheets, auth, { now, ping } = {}) {
         return false;
     }
 
-    // Option B: delete the prior reminder before posting the new one.
-    if (lastMessageId) {
-        try {
-            const prev = await channel.messages.fetch(lastMessageId);
-            await prev.delete();
-        } catch { /* already gone/deleted */ }
-        lastMessageId = null;
-    }
+    // Sweep any prior reminders this bot left in the channel before posting.
+    const removed = await sweepPreviousReminders(channel, client);
+    if (removed) console.log(`[${ts}] [reminder] swept ${removed} prior reminder(s)`);
 
     const sent = await channel.send(payload);
-    lastMessageId = sent.id;
     console.log(`[${ts}] [reminder] posted to ${REMINDER_CHANNEL_ID} (msg ${sent.id})`);
     return true;
 }
@@ -153,12 +197,15 @@ function startReminderSchedule(client, sheets, auth) {
 module.exports = {
     startReminderSchedule,
     postReminderNow,
+    sweepPreviousReminders,
     buildReminderPayload,
     reminderButtons,
     REMINDER_CHANNEL_ID,
+    REMINDER_EMBED_TITLE,
     CRON_EXPR,
     PING_ROLE_ID,
     PING_HOUR,
-    // Test-only: clear the in-memory "last message" tracker between cases.
-    _resetForTest() { lastMessageId = null; }
+    // Test-only: no in-memory state remains (sweep is history-driven); kept as a
+    // no-op so existing cases that call it still work.
+    _resetForTest() { /* no-op */ }
 };

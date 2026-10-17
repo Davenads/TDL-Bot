@@ -42,10 +42,30 @@ function makeSheets(signups) {
     };
 }
 
-function fakeChannel({ canView = true, canSend = true } = {}) {
+// `seed` pre-populates channel history with { id, authorId, title } descriptors
+// so we can exercise the sweep against a mix of prior bot reminders, foreign
+// messages, and panel posts. `send` appends our own bot-authored messages.
+function fakeChannel({ canView = true, canSend = true, seed = [] } = {}) {
     const rec = { sent: [], deleted: [] };
+    const history = [];
+    const mkMsg = (id, authorId, title) => {
+        const m = {
+            id,
+            author: { id: authorId },
+            embeds: [{ title }],
+            async delete() {
+                rec.deleted.push(id);
+                const i = history.indexOf(m);
+                if (i >= 0) history.splice(i, 1);
+            }
+        };
+        return m;
+    };
+    for (const s of seed) history.push(mkMsg(s.id, s.authorId, s.title));
+    let counter = 0;
     return {
         rec,
+        id: 'C1',
         guild: { members: { me: { id: 'bot' } } },
         permissionsFor: () => ({
             has: (flag) => {
@@ -55,18 +75,21 @@ function fakeChannel({ canView = true, canSend = true } = {}) {
             }
         }),
         async send(payload) {
-            const id = 'm' + (rec.sent.length + 1);
+            const id = 'm' + (++counter);
             rec.sent.push({ id, payload });
+            const title = payload.embeds[0] && payload.embeds[0].data && payload.embeds[0].data.title;
+            history.push(mkMsg(id, 'bot', title));
             return { id };
         },
         messages: {
-            fetch: async (id) => ({ id, async delete() { rec.deleted.push(id); } })
+            // Sweep calls fetch({ limit }); return a snapshot of history.
+            fetch: async () => history.slice()
         }
     };
 }
 
 function fakeClient(channel) {
-    return { channels: { fetch: async () => channel } };
+    return { user: { id: 'bot' }, channels: { fetch: async () => channel } };
 }
 
 const SIGNUPS = [SIGNUP_HEADER, ['', NOW, 'U1', 'alice', '', 'HLD']];
@@ -117,8 +140,8 @@ test('postReminderNow: posts the panel when the window is open', async () => {
     assert.deepStrictEqual(buttonIds(payload), ['tdlsignup_panel', 'tdlwithdraw_panel']);
 });
 
-// ---- Option B: replace previous ----
-test('postReminderNow: deletes the prior reminder before posting the next', async () => {
+// ---- sweep: replace previous ----
+test('postReminderNow: sweeps the prior reminder before posting the next', async () => {
     reminder._resetForTest();
     const ch = fakeChannel();
     const client = fakeClient(ch);
@@ -127,7 +150,23 @@ test('postReminderNow: deletes the prior reminder before posting the next', asyn
     assert.strictEqual(first, true);
     assert.strictEqual(second, true);
     assert.strictEqual(ch.rec.sent.length, 2, 'two posts total');
-    assert.deepStrictEqual(ch.rec.deleted, ['m1'], 'the first reminder was deleted');
+    assert.deepStrictEqual(ch.rec.deleted, ['m1'], 'the first reminder was swept');
+});
+
+test('postReminderNow: sweeps ALL prior bot reminders, leaves foreign/panel posts', async () => {
+    reminder._resetForTest();
+    const ch = fakeChannel({
+        seed: [
+            { id: 'r1', authorId: 'bot', title: reminder.REMINDER_EMBED_TITLE },        // ours — swept
+            { id: 'r2', authorId: 'bot', title: reminder.REMINDER_EMBED_TITLE },        // ours — swept
+            { id: 'u1', authorId: 'someuser', title: reminder.REMINDER_EMBED_TITLE },   // foreign — kept
+            { id: 'p1', authorId: 'bot', title: 'Toeshank Dueling League — Sign Up' }   // panel lead embed — kept
+        ]
+    });
+    const posted = await reminder.postReminderNow(fakeClient(ch), makeSheets(SIGNUPS), AUTH, { now: OPEN_THU });
+    assert.strictEqual(posted, true);
+    assert.deepStrictEqual(ch.rec.deleted.slice().sort(), ['r1', 'r2'], 'both bot reminders swept');
+    assert.strictEqual(ch.rec.sent.length, 1, 'one fresh reminder posted');
 });
 
 // ---- role ping: 4 PM only ----
