@@ -72,7 +72,7 @@ function windowClosedEmbed() {
             'Opens: **Wednesday 12:00 AM ET**\n' +
             'Closes: **Monday 7:00 PM ET**\n\n' +
             'Signups close Monday evening so Toeshank can build the fight card. ' +
-            'The event runs **Tuesdays at 6:00 PM ET**.'
+            'The event runs **Tuesdays at 7:00 PM ET**.'
         )
         .setFooter({ text: 'Toeshank Dueling League' })
         .setTimestamp();
@@ -240,7 +240,7 @@ async function startSignup(interaction, sheets, auth) {
         .setColor(BRAND_COLOR)
         .setTitle('Toeshank Dueling League — Signup')
         .setDescription(
-            `Event: **${getEventDateString()} — 6:00 PM ET**\n\n` +
+            `Event: **${getEventDateString()} — 7:00 PM ET**\n\n` +
             '**Step 1:** Choose your division.\n' +
             '- **HLD** — High Level Dueling\n' +
             '- **LLD** — Low Level Dueling\n' +
@@ -371,7 +371,7 @@ module.exports = {
             const summary = new EmbedBuilder()
                 .setColor(OK_COLOR)
                 .setTitle('Signup Confirmed')
-                .setDescription(`You're set for **${getEventDateString()} — 6:00 PM ET**.`)
+                .setDescription(`You're set for **${getEventDateString()} — 7:00 PM ET**.`)
                 .addFields(
                     { name: 'Division', value: CATEGORY_LABEL[category], inline: true },
                     {
@@ -391,7 +391,7 @@ module.exports = {
             const publicEmbed = new EmbedBuilder()
                 .setColor(OK_COLOR)
                 .setDescription(
-                    `**${dataName}** ${action} — ${getEventDateString()}, 6:00 PM ET\n` +
+                    `**${dataName}** ${action} — ${getEventDateString()}, 7:00 PM ET\n` +
                     `**Division:** ${CATEGORY_LABEL[category]}` +
                     (notes ? `\n**Notes:** ${notes}` : '')
                 )

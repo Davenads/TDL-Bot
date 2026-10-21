@@ -1,7 +1,7 @@
 /**
  * Utility functions for TDL registration-window and week calculations.
  *
- * TDL event:            Tuesdays 6:00 PM ET (~4 hours).
+ * TDL event:            Tuesdays 7:00 PM ET (~4 hours).
  * Registration window:  Opens Wednesday 12:00 AM ET, closes Monday 7:00 PM ET.
  *                       Closed from Monday 7 PM through all of Tuesday so Toeshank
  *                       can build the fight card and run the event.
@@ -50,8 +50,8 @@ function getWeekStartDate(now = nowET()) {
 }
 
 /**
- * The event date this registration cycle points at: upcoming Tuesday 6:00 PM ET.
- * On Tuesday itself, returns today at 6:00 PM ET.
+ * The event date this registration cycle points at: upcoming Tuesday 7:00 PM ET.
+ * On Tuesday itself, returns today at 7:00 PM ET.
  * @param {Date} [now] - Injectable clock for testing (defaults to ET now).
  * @returns {Date}
  */
@@ -60,7 +60,7 @@ function getCurrentEventDate(now = nowET()) {
     const daysUntilTuesday = (2 - day + 7) % 7; // 0 if already Tuesday
     const event = new Date(now);
     event.setDate(now.getDate() + daysUntilTuesday);
-    event.setHours(18, 0, 0, 0);
+    event.setHours(19, 0, 0, 0);
     return event;
 }
 

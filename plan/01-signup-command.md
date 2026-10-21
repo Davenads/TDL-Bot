@@ -60,7 +60,7 @@ across multiple modals). Redis stays optional, used only for the signups read-ca
 
 ## Registration window (chrono gate)
 
-Event is **Monday 6:00 PM ET**. Mirrors DFC's `isRegistrationOpen()` day/hour gate.
+Event is **Monday 7:00 PM ET**. Mirrors DFC's `isRegistrationOpen()` day/hour gate.
 
 **DECIDED window** — closes **one day before the event** so Toeshank can build the
 matchups from the signup list before Monday night:
@@ -81,7 +81,7 @@ matchups from the signup list before Monday night:
 > — a one-constant change.
 
 Also adapt DFC's week-boundary helpers so "current week's signups" can be computed:
-- `getCurrentEventDate()` → upcoming Monday 6pm ET
+- `getCurrentEventDate()` → upcoming Monday 7pm ET
 - `getWeekStartDate()` → the Tuesday 12am ET that opened the current window
 - `filterCurrentWeekSignups(rows)` → rows with Timestamp >= week start
 
@@ -182,7 +182,7 @@ Post a **public** confirmation message (not ephemeral) so signups are visible fo
 hype/roster awareness. Keep it lightweight — no UUID in the public message.
 
 ```
-✅ ToeshankFan signed up for TDL — Monday <date> 6PM ET
+✅ ToeshankFan signed up for TDL — Monday <date> 7PM ET
 Division: Both (HLD + LLD)
 Notes: "prefer bo5 for HLD"
 ```

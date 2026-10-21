@@ -92,12 +92,12 @@ test('weekStart resolves to the correct Wednesday across the cycle', () => {
     }
 });
 
-// ---- getCurrentEventDate: upcoming Tuesday 18:00 ----
-test('event date is always a Tuesday at 6:00 PM', () => {
+// ---- getCurrentEventDate: upcoming Tuesday 19:00 ----
+test('event date is always a Tuesday at 7:00 PM', () => {
     for (const d of [SUN, MON, TUE, WED, THU, FRI, SAT]) {
         const ev = getCurrentEventDate(d);
         assert.strictEqual(ev.getDay(), DAY.TUE, `event not Tuesday for getDay ${d.getDay()}`);
-        assert.strictEqual(ev.getHours(), 18);
+        assert.strictEqual(ev.getHours(), 19);
         assert.strictEqual(ev.getMinutes(), 0);
     }
 });
@@ -118,7 +118,7 @@ test('weekStart (Wed) and event (Tue) bound the same cycle', () => {
     for (const d of [SUN, MON, TUE, WED, THU, FRI, SAT]) {
         const ws = getWeekStartDate(d);
         const ev = getCurrentEventDate(d);
-        // Normalize the event to local midnight so the 6:00 PM event time
+        // Normalize the event to local midnight so the 7:00 PM event time
         // doesn't skew the calendar-day delta.
         const evMidnight = new Date(ev.getFullYear(), ev.getMonth(), ev.getDate());
         const days = Math.round((evMidnight - ws) / 86400000);

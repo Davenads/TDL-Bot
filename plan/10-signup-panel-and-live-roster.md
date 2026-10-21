@@ -21,7 +21,7 @@ Decisions locked by the user:
 ## 1. Panel shape (one persistent message)
 A single bot-owned message in the bound channel, **edited in place** on refresh:
 
-- **Embed A — Signup panel:** title, `Event: <date> — 6:00 PM ET`, short
+- **Embed A — Signup panel:** title, `Event: <date> — 7:00 PM ET`, short
   instructions.
 - **Embed B — Live roster:** identical to what `/recentsignups` renders today —
   dueler count + `HLD (n)` / `LLD (n)` fields of sorted Data Names. (Discord

@@ -42,7 +42,7 @@ function panelInfoEmbed() {
         .setColor(BRAND_COLOR)
         .setTitle('Toeshank Dueling League — Sign Up')
         .setDescription(
-            `Event: **${getEventDateString()} — 6:00 PM ET**\n\n` +
+            `Event: **${getEventDateString()} — 7:00 PM ET**\n\n` +
             'Press **Sign Up** below to register for this week. You can choose ' +
             '**HLD**, **LLD**, or **Both**, and add optional notes.\n\n' +
             '_You need the **@Dueler** role and a roster entry to sign up._'

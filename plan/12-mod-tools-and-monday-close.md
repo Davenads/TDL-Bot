@@ -46,7 +46,7 @@ work. Cutoff is `>= 19`, i.e. 6:59 PM open, 7:00 PM closed.
 
 ### What does NOT change
 - `getWeekStartDate` (most-recent-Wednesday) and `getCurrentEventDate` (upcoming
-  Tuesday 6 PM) are untouched. The weekStart cache stamp is unaffected, so there's
+  Tuesday 7 PM) are untouched. The weekStart cache stamp is unaffected, so there's
   **no row self-heal / deploy-timing caveat** — this can ship any time.
 - `/withdraw` stays allowed anytime (soft note when closed) — unchanged.
 

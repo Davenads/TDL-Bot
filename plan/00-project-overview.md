@@ -12,7 +12,7 @@ A Discord.js bot for the **Toeshank Dueling League (TDL)** — a weekly Diablo 2
 Resurrected PvP dueling event hosted by professional dueler **Toeshank**. Players
 also queue for matches outside the weekly event.
 
-The event runs **Mondays at 6:00 PM ET** and lasts roughly **4 hours**.
+The event runs **Mondays at 7:00 PM ET** and lasts roughly **4 hours**.
 
 The bot's job (starting point): let players **sign up** for the weekly event via a
 Discord slash command, writing their signup directly into the league's Google Sheet

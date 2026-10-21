@@ -7,7 +7,7 @@ the source of truth; `01` and `02` reflect these.
 |---|---|---|
 | 1 | Registration tab schema | **Reshape** to `Timestamp \| Discord UUID \| Discord Username \| Notes \| Category`. **Bot-only** — the Google Form is **retired** (a Form can't reliably capture a Discord UUID). See row 9. |
 | 2 | "Both" storage | **Two rows** — one `HLD`, one `LLD`. Stored `Category` is only ever `HLD` or `LLD`. |
-| 3 | Registration window | **Closes one day before the event** so Toeshank can build matchups. Event = Mon 6PM ET → registration **closes end of Sunday (Sun 11:59 PM ET)**; **opens Tue 12:00 AM ET**. Monday is closed (organize + event day). |
+| 3 | Registration window | **Closes one day before the event** so Toeshank can build matchups. Event = Mon 7PM ET → registration **closes end of Sunday (Sun 11:59 PM ET)**; **opens Tue 12:00 AM ET**. Monday is closed (organize + event day). |
 | 4 | Role gating | Require the **@Dueler** role to use `/signup`. |
 | 5 | Duplicate policy | **Yes, upsert.** One signup per player per division per week. Re-running replaces that player's existing row for that division. Dedupe key = (Discord UUID + Category). |
 | 6 | Timestamp format | **Match the retired Form's** Sheets-native format (`M/D/YYYY H:mm:ss`) so the Looker report keeps parsing. Bot writes this via `formatSheetTimestamp`. |
@@ -39,7 +39,7 @@ the source of truth; `01` and `02` reflect these.
 
 ## Assumptions still in force
 
-- Event: **Monday 6:00 PM ET**, ~4 hours.
+- Event: **Monday 7:00 PM ET**, ~4 hours.
 - Bot writes to `Registration Test` in `TEST_MODE`, `Registration` in prod.
 - Direct Sheets write (not a Form POST) to capture Discord UUID.
 - `/signup` requires roster membership (UUID in `Roster` col C) **and** the `@Dueler`

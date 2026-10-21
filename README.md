@@ -1,7 +1,7 @@
 # TDL-Bot
 
 Discord bot for the **Toeshank Dueling League (TDL)** — a weekly Diablo 2: Resurrected
-PvP dueling event hosted by Toeshank. The event runs Tuesdays at 6:00 PM ET (~4 hours).
+PvP dueling event hosted by Toeshank. The event runs Tuesdays at 7:00 PM ET (~4 hours).
 
 The bot handles weekly event signups, writing directly to the league's Google Sheet
 (their pseudo-database) and capturing each player's Discord UUID and live username —

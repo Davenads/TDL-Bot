@@ -96,7 +96,7 @@ async function startWithdraw(interaction, sheets, auth) {
         .setColor(BRAND_COLOR)
         .setTitle('Toeshank Dueling League — Withdraw')
         .setDescription(
-            `Event: **${getEventDateString()} — 6:00 PM ET**\n\n` +
+            `Event: **${getEventDateString()} — 7:00 PM ET**\n\n` +
             `You're currently signed up for: **${divisions.join(', ')}**.\n\n` +
             'Choose which format(s) to withdraw from.' +
             softNote

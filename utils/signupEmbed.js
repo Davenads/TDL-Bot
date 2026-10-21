@@ -90,7 +90,7 @@ async function buildSignupsEmbed({ sheets, auth, spreadsheetId, countsOnly = fal
         .setColor(BRAND_COLOR)
         .setTitle('TDL Signups')
         .setDescription(
-            `Event: **${getEventDateString()} — 6:00 PM ET**\n` +
+            `Event: **${getEventDateString()} — 7:00 PM ET**\n` +
             `**${allUuids.size}** ${allUuids.size === 1 ? 'dueler' : 'duelers'} signed up so far.`
         )
         .setFooter({ text: 'Toeshank Dueling League' })
@@ -155,7 +155,7 @@ async function buildModSignupsEmbed({ sheets, auth, spreadsheetId }) {
         .setColor(BRAND_COLOR)
         .setTitle('TDL Signups — Mod View')
         .setDescription(
-            `Event: **${getEventDateString()} — 6:00 PM ET**\n` +
+            `Event: **${getEventDateString()} — 7:00 PM ET**\n` +
             `**${allUuids.size}** ${allUuids.size === 1 ? 'dueler' : 'duelers'} signed up so far.`
         )
         .setFooter({ text: 'Toeshank Dueling League' })
